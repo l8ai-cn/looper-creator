@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0",
+  "name": "Vague Improvement Loop",
+  "purpose": "Improve the project until it is good.",
+  "trigger": {
+    "type": "goal",
+    "description": "Keep working until quality feels high."
+  },
+  "observation": {
+    "description": "Look around."
+  },
+  "action": {
+    "description": "Improve things."
+  },
+  "success_condition": {
+    "description": "Everything looks better."
+  },
+  "failure_condition": {
+    "description": "The agent feels stuck."
+  },
+  "verifier": {
+    "command": "echo ok || true",
+    "expected_result": "Looks fine.",
+    "protected_paths": []
+  },
+  "budgets": {
+    "max_iterations": 0,
+    "wall_clock_minutes": 0
+  },
+  "no_progress": {
+    "fingerprint_fields": [
+      "overall progress"
+    ],
+    "max_stale_iterations": 0
+  },
+  "state": {
+    "path": "state.json",
+    "journal_path": "journal.jsonl"
+  },
+  "escalation": {
+    "condition": "",
+    "owner": "",
+    "channel": "",
+    "message_template": ""
+  },
+  "human_gates": {
+    "irreversible_actions": []
+  }
+}

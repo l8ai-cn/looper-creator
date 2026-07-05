@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "name": "Example PR Fix Loop",
+  "purpose": "Iterate on a pull request until the local test suite and lint command pass, then stop before pushing changes.",
+  "trigger": {
+    "type": "goal",
+    "description": "Run when a developer asks the agent to keep fixing a PR until local verification passes."
+  },
+  "observation": {
+    "description": "Read PROGRESS.md, inspect git status, and run the verifier to identify current failures."
+  },
+  "action": {
+    "description": "Make one focused code or test-support change that addresses the highest-confidence verifier failure."
+  },
+  "success_condition": {
+    "description": "The verifier exits 0 without skipped checks or weakened validation.",
+    "check_command": "test -f LOOP.md && test -f PROGRESS.md && test -f state.json"
+  },
+  "failure_condition": {
+    "description": "The verifier cannot run because dependencies are missing, or the same failure remains after the no-progress threshold."
+  },
+  "verifier": {
+    "command": "bash scripts/verify.sh",
+    "expected_result": "Exit code 0, with test and lint output recorded in PROGRESS.md.",
+    "protected_paths": [
+      "scripts/verify.sh",
+      ".github/workflows",
+      "tests"
+    ]
+  },
+  "budgets": {
+    "max_iterations": 8,
+    "wall_clock_minutes": 60,
+    "max_tokens": 200000,
+    "max_cost_usd": 25
+  },
+  "no_progress": {
+    "fingerprint_fields": [
+      "git_head",
+      "failing_test_names",
+      "verifier_exit_code"
+    ],
+    "max_stale_iterations": 2
+  },
+  "state": {
+    "path": "state.json",
+    "journal_path": "journal.jsonl"
+  },
+  "escalation": {
+    "condition": "No-progress threshold is reached, verifier dependencies are unavailable, or a protected verifier path must change.",
+    "owner": "human maintainer",
+    "channel": "Codex thread",
+    "message_template": "Loop blocked for {loop_name}: {reason}. Last verifier result: {verifier_result}."
+  },
+  "human_gates": {
+    "irreversible_actions": [
+      "git push",
+      "merge pull request",
+      "deploy to production",
+      "delete remote resources"
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Validate manifests
+        run: |
+          python3 skills/looper-creator/scripts/validate_loop_project.py skills/looper-creator/examples/minimal-valid.loop.json
+          if python3 skills/looper-creator/scripts/validate_loop_project.py skills/looper-creator/examples/invalid-vague-goal.loop.json; then
+            echo "invalid example unexpectedly passed"
+            exit 1
+          fi
+      - name: Generate sample project
+        run: |
+          python3 skills/looper-creator/scripts/create_loop_project.py \
+            --manifest skills/looper-creator/examples/minimal-valid.loop.json \
+            --output /tmp/example-loop
+          python3 skills/looper-creator/scripts/validate_loop_project.py /tmp/example-loop
+      - name: Run tests
+        run: python3 -m unittest discover -s skills/looper-creator/tests

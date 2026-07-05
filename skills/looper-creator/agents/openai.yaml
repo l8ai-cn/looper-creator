@@ -1,0 +1,4 @@
+interface:
+  display_name: "Looper Creator"
+  short_description: "Create verified autonomous loop projects"
+  default_prompt: "Use $looper-creator to create a verified autonomous loop project for my goal."

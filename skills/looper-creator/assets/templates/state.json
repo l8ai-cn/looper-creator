@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "loop_name": "",
+  "status": "planned",
+  "iteration": 0,
+  "started_at": null,
+  "updated_at": null,
+  "last_verifier_exit_code": null,
+  "last_no_progress_fingerprint": null,
+  "stale_iterations": 0,
+  "terminal_reason": null
+}
