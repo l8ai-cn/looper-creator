@@ -1,0 +1,608 @@
+{
+  "kind": "RecursiveLoopOrchestration",
+  "schema_version": "2.0",
+  "metadata": {
+    "id": "website-browser-testing",
+    "name": "Website Browser Testing Loop",
+    "description": "Run a read-only browser-based website test, capture screenshots and console/network evidence, review raw findings, and produce a confirmed bug list.",
+    "locale": "en-US"
+  },
+  "objective": {
+    "user_goal": "Test a website with optional administrator credentials and produce an evidence-backed bug list.",
+    "business_value": "Turn broad website testing requests into bounded browser probes that save tokens by storing evidence on disk and reviewing only distilled findings.",
+    "done_definition": "A loop run folder contains browser evidence, reviewed bug-list.md, residual-risk notes, and terminal verification confirming artifacts exist and secrets were not written to files.",
+    "non_goals": [
+      "Do not create, update, approve, delete, publish, export sensitive data, or submit business forms.",
+      "Do not perform load testing, vulnerability exploitation, destructive security testing, or credential changes.",
+      "Do not claim coverage of backend source code, database health, host health, or microservice internals."
+    ]
+  },
+  "clarification_policy": {
+    "ambiguity_triggers": [
+      "mutation permission needed",
+      "test depth requires production data change",
+      "expected role behavior unclear",
+      "captcha, MFA, or session challenge blocks login"
+    ],
+    "default_action": "make_low_risk_assumption",
+    "secondary_user_query": {
+      "prompt": "Should this browser test stay read-only, or may it create controlled test data in a non-production environment?",
+      "required_when": [
+        "a defect can only be confirmed by mutating production data",
+        "a destructive or irreversible action would be required",
+        "admin authority boundary is unclear"
+      ],
+      "max_questions": 2
+    },
+    "assumption_policy": {
+      "allowed": "Assume read-only, non-destructive browser testing is authorized; record all skipped mutation paths as residual risk.",
+      "record_path": "PROGRESS.md"
+    },
+    "block_if": [
+      "action would mutate production data",
+      "test requires bypassing authentication or authorization",
+      "credential storage would be required",
+      "privacy-sensitive data would need to be exported"
+    ]
+  },
+  "decomposition_policy": {
+    "strategy": "recursive_task_graph",
+    "split_until": [
+      "each route or workflow probe has a single observable acceptance criterion",
+      "each reported bug has reproduction steps and evidence artifact references",
+      "each task fits inside the browser evidence and token budget"
+    ],
+    "minimum_task_granularity": "one login, navigation, route, form-validation, console/network, or reporting check with a deterministic artifact",
+    "max_depth": 4,
+    "dependency_policy": "parents cannot complete until child probes and their artifact checks pass"
+  },
+  "loop_nodes": [
+    {
+      "id": "root",
+      "type": "agent_loop",
+      "purpose": "Coordinate read-only admin website testing and evidence-backed bug reporting.",
+      "entry_conditions": [
+        "target_url and credential reference are available",
+        "read-only safety boundary is recorded"
+      ],
+      "exit_conditions": [
+        "terminal verification passed",
+        "budget exit reached",
+        "human gate required"
+      ],
+      "steps": [
+        "load durable state",
+        "confirm scope and safety boundary",
+        "run browser probes",
+        "review evidence",
+        "write bug list",
+        "verify artifacts"
+      ],
+      "context_pack": [
+        "loop.json",
+        "PROGRESS.md",
+        "state.json",
+        "evidence/browser-summary.md",
+        "bug-list.md"
+      ],
+      "agent_assignments": [
+        "orchestrator"
+      ],
+      "verification_refs": [
+        "terminal"
+      ],
+      "children": [
+        {
+          "id": "browser-probe-cycle",
+          "type": "evaluator_optimizer_loop",
+          "purpose": "Probe visible admin workflows, capture artifacts, and iterate only while new high-value evidence appears.",
+          "entry_conditions": [
+            "login page reachable",
+            "browser tooling available"
+          ],
+          "exit_conditions": [
+            "all planned probes completed",
+            "no-progress exit reached",
+            "login/session block requires escalation"
+          ],
+          "steps": [
+            "open target",
+            "login",
+            "collect console and network errors",
+            "probe navigation and visible workflows",
+            "capture screenshots and route notes",
+            "record evidence fingerprints"
+          ],
+          "context_pack": [
+            "state.json",
+            "tasks.json",
+            "evidence/browser-summary.md"
+          ],
+          "agent_assignments": [
+            "browser_worker",
+            "defect_reviewer"
+          ],
+          "verification_refs": [
+            "browser-artifacts",
+            "no-secret-files"
+          ]
+        },
+        {
+          "id": "bug-report-review",
+          "type": "reflection_loop",
+          "purpose": "Promote only evidence-backed findings into the final bug list and separate uncertain leads.",
+          "entry_conditions": [
+            "browser evidence exists"
+          ],
+          "exit_conditions": [
+            "bug list reviewed",
+            "uncertain findings labeled as residual risk"
+          ],
+          "steps": [
+            "deduplicate findings",
+            "classify severity",
+            "verify each reproduction step",
+            "record residual risk"
+          ],
+          "context_pack": [
+            "evidence/browser-summary.md",
+            "evidence/console-network.json",
+            "bug-list.md"
+          ],
+          "agent_assignments": [
+            "defect_reviewer"
+          ],
+          "verification_refs": [
+            "bug-list-quality"
+          ]
+        }
+      ]
+    }
+  ],
+  "atomic_tasks": [
+    {
+      "id": "scope-and-safety",
+      "goal": "Record the target, credential reference, read-only boundary, and blocked mutation actions.",
+      "input_refs": [
+        "user request",
+        "loop.json"
+      ],
+      "output_artifacts": [
+        "PROGRESS.md",
+        "state.json"
+      ],
+      "dependencies": [],
+      "assigned_agent": "orchestrator",
+      "tools": [
+        "shell"
+      ],
+      "acceptance_criteria": [
+        "PROGRESS.md states read-only scope",
+        "state.json does not contain plaintext password"
+      ],
+      "verification_refs": [
+        "no-secret-files"
+      ],
+      "max_attempts": 1,
+      "estimated_token_budget": 4000
+    },
+    {
+      "id": "login-and-shell-probe",
+      "goal": "Open the site, authenticate using the environment-backed credential, and capture app shell evidence without changing data.",
+      "input_refs": [
+        "target_url",
+        "auth_ref:env:WEBSITE_TEST_PASSWORD"
+      ],
+      "output_artifacts": [
+        "evidence/login.png",
+        "evidence/app-shell.png",
+        "evidence/browser-summary.md"
+      ],
+      "dependencies": [
+        "scope-and-safety"
+      ],
+      "assigned_agent": "browser_worker",
+      "tools": [
+        "playwright",
+        "browser"
+      ],
+      "acceptance_criteria": [
+        "login result is recorded as success, blocked, or failed with evidence",
+        "no destructive action is clicked"
+      ],
+      "verification_refs": [
+        "browser-artifacts",
+        "no-secret-files"
+      ],
+      "max_attempts": 2,
+      "estimated_token_budget": 16000
+    },
+    {
+      "id": "navigation-and-error-probes",
+      "goal": "Probe visible routes, empty/error/loading states, and console/network failures from the authenticated app shell.",
+      "input_refs": [
+        "evidence/app-shell.png",
+        "authenticated browser state"
+      ],
+      "output_artifacts": [
+        "evidence/route-map.json",
+        "evidence/console-network.json",
+        "evidence/screenshots/"
+      ],
+      "dependencies": [
+        "login-and-shell-probe"
+      ],
+      "assigned_agent": "browser_worker",
+      "tools": [
+        "playwright",
+        "browser"
+      ],
+      "acceptance_criteria": [
+        "at least three reachable protected surfaces are checked when available",
+        "console errors and failed network requests are captured",
+        "blocked routes are labeled as automation/session boundary unless manually confirmed"
+      ],
+      "verification_refs": [
+        "browser-artifacts"
+      ],
+      "max_attempts": 2,
+      "estimated_token_budget": 24000
+    },
+    {
+      "id": "bug-list-review",
+      "goal": "Write a reproducible bug list from browser evidence and separate unconfirmed leads from confirmed defects.",
+      "input_refs": [
+        "evidence/browser-summary.md",
+        "evidence/console-network.json",
+        "evidence/screenshots/"
+      ],
+      "output_artifacts": [
+        "bug-list.md"
+      ],
+      "dependencies": [
+        "navigation-and-error-probes"
+      ],
+      "assigned_agent": "defect_reviewer",
+      "tools": [
+        "shell"
+      ],
+      "acceptance_criteria": [
+        "each confirmed bug includes severity, reproduction steps, expected behavior, actual behavior, evidence, and repair direction",
+        "uncertain findings are not promoted to confirmed bugs"
+      ],
+      "verification_refs": [
+        "bug-list-quality",
+        "terminal"
+      ],
+      "max_attempts": 2,
+      "estimated_token_budget": 12000
+    }
+  ],
+  "agents": [
+    {
+      "id": "orchestrator",
+      "role": "orchestrator",
+      "model_class": "strong_reasoning",
+      "responsibilities": [
+        "maintain durable state",
+        "enforce read-only scope",
+        "decide exits and escalation"
+      ],
+      "context_scope": "shared",
+      "may_modify": [
+        "PROGRESS.md",
+        "state.json",
+        "tasks.json",
+        "journal.jsonl"
+      ]
+    },
+    {
+      "id": "browser_worker",
+      "role": "browser testing worker",
+      "model_class": "fast_worker",
+      "responsibilities": [
+        "execute browser probes",
+        "capture screenshots",
+        "collect console and network evidence"
+      ],
+      "context_scope": "task_private",
+      "may_modify": [
+        "evidence/"
+      ]
+    },
+    {
+      "id": "defect_reviewer",
+      "role": "defect reviewer",
+      "model_class": "strong_reasoning",
+      "responsibilities": [
+        "deduplicate findings",
+        "classify severity",
+        "reject unproven defects"
+      ],
+      "context_scope": "review_private",
+      "may_modify": [
+        "bug-list.md",
+        "PROGRESS.md"
+      ]
+    }
+  ],
+  "collaboration_policy": {
+    "patterns": [
+      "orchestrator_workers",
+      "evaluator_optimizer"
+    ],
+    "subagent_activation": {
+      "allowed_when": [
+        "browser route probes are independent",
+        "console/network review can be separated from visual workflow review",
+        "independent defect review is required"
+      ],
+      "disallowed_when": [
+        "multiple workers would use the same authenticated session destructively",
+        "a worker asks to mutate production data"
+      ],
+      "token_budget_policy": "workers return distilled evidence summaries under 2000 tokens with artifact paths instead of raw logs"
+    },
+    "handoff_contract": {
+      "required_fields": [
+        "task_id",
+        "scope",
+        "auth_ref",
+        "read_only_boundary",
+        "expected_artifacts",
+        "verification_refs"
+      ],
+      "return_fields": [
+        "status",
+        "artifacts",
+        "evidence",
+        "confirmed_findings",
+        "open_questions"
+      ]
+    }
+  },
+  "context_policy": {
+    "max_context_tokens": 60000,
+    "required_context_pack": [
+      "loop.json",
+      "PROGRESS.md",
+      "state.json",
+      "tasks.json"
+    ],
+    "retrieval_strategy": "just_in_time",
+    "tool_output_trimming": "store screenshots, HAR-like summaries, console error summaries, route names, and reproduction steps; avoid raw noisy logs",
+    "compaction": {
+      "trigger_ratio": 0.75,
+      "summary_contract": "preserve target, safety boundary, completed probes, confirmed defects, artifacts, skipped routes, and exit reason"
+    },
+    "durable_memory": {
+      "state_path": "state.json",
+      "journal_path": "journal.jsonl",
+      "progress_path": "PROGRESS.md"
+    },
+    "excluded_context": [
+      "plaintext password",
+      "cookies",
+      "tokens",
+      "unrelated page data",
+      "personal data"
+    ]
+  },
+  "termination_policy": {
+    "success": [
+      "bug-list.md exists and passes quality checks",
+      "browser evidence artifacts exist",
+      "terminal verification exits 0"
+    ],
+    "failure": [
+      "target cannot be reached after two attempts",
+      "login cannot proceed because of MFA/captcha/session challenge",
+      "browser tooling unavailable",
+      "no artifact can be captured"
+    ],
+    "budget_exits": {
+      "max_iterations": 5,
+      "max_tokens": 90000,
+      "wall_clock_minutes": 60
+    },
+    "no_progress": {
+      "fingerprint_fields": [
+        "visited_routes",
+        "confirmed_bug_ids",
+        "failed_request_signatures",
+        "screenshot_count"
+      ],
+      "max_stale_iterations": 2
+    },
+    "human_gate": [
+      "before any mutation",
+      "before exporting user data",
+      "before security exploitation",
+      "before changing credentials or permissions"
+    ]
+  },
+  "verification_policy": {
+    "verifiers": [
+      {
+        "id": "browser-artifacts",
+        "scope": "per_task",
+        "command": "test -s evidence/browser-summary.md && find evidence -type f | grep -q .",
+        "expected_result": "exit code 0"
+      },
+      {
+        "id": "bug-list-quality",
+        "scope": "per_task",
+        "command": "test -s bug-list.md && grep -E \"Status:|Severity:|Evidence:\" bug-list.md",
+        "expected_result": "exit code 0"
+      },
+      {
+        "id": "no-secret-files",
+        "scope": "per_task",
+        "command": "! grep -R -E \"plaintext_password|Cookie:|Authorization:|access_token=eyJ|Bearer [A-Za-z0-9._~-]{20,}|eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\" PROGRESS.md state.json bug-list.md evidence",
+        "expected_result": "exit code 0"
+      },
+      {
+        "id": "terminal",
+        "scope": "terminal",
+        "command": "bash scripts/verify.sh",
+        "expected_result": "exit code 0"
+      }
+    ],
+    "protected_paths": [
+      "scripts/verify.sh",
+      "loop.json",
+      "evidence/"
+    ],
+    "anti_gaming_rules": [
+      "do not weaken artifact checks",
+      "do not mark unconfirmed leads as confirmed defects",
+      "do not store credentials in files",
+      "do not bypass login or authorization"
+    ]
+  },
+  "cost_policy": {
+    "optimization_goal": "maximize verified browser evidence per token while avoiding repeated route re-reading and raw log dumping",
+    "stop_when_marginal_value_low": true,
+    "token_budget_by_agent": {
+      "orchestrator": 24000,
+      "browser_worker": 42000,
+      "defect_reviewer": 24000
+    }
+  },
+  "risk_policy": {
+    "risk_levels": [
+      "low",
+      "medium",
+      "high",
+      "critical"
+    ],
+    "forbidden_behaviors": [
+      "silent fallback",
+      "production data mutation without approval",
+      "credential persistence",
+      "destructive testing",
+      "claiming automation login failure as site failure without evidence"
+    ],
+    "high_risk_requires_human": [
+      "production data",
+      "security exploitation",
+      "credential changes",
+      "permission changes",
+      "billing or paid resource usage"
+    ]
+  },
+  "execution_adapters": [
+    {
+      "target": "codex",
+      "supports_subagents": true,
+      "subagent_activation": "explicit_request",
+      "context_reload_model": "session_instruction_discovery",
+      "approval_model": "sandbox_and_policy",
+      "deterministic_hooks": "not_assumed",
+      "generated_files": [
+        "AGENTS.md"
+      ],
+      "instruction_files": [
+        "AGENTS.md"
+      ],
+      "unsupported_capability_behavior": "block_and_report"
+    },
+    {
+      "target": "claude_code",
+      "supports_subagents": true,
+      "subagent_activation": "description_or_explicit_agent",
+      "context_reload_model": "CLAUDE.md_and_memory",
+      "approval_model": "permissions_and_hooks",
+      "deterministic_hooks": "supported",
+      "generated_files": [
+        "CLAUDE.md",
+        ".claude/settings.json"
+      ],
+      "instruction_files": [
+        "CLAUDE.md"
+      ],
+      "unsupported_capability_behavior": "block_and_report"
+    },
+    {
+      "target": "cursor",
+      "supports_subagents": true,
+      "subagent_activation": "cursor_subagents_or_cloud_agents",
+      "context_reload_model": "rules_skills_mentions",
+      "approval_model": "cursor_agent_security",
+      "deterministic_hooks": "supported_when_configured",
+      "generated_files": [
+        ".cursor/rules/looper-creator.mdc"
+      ],
+      "instruction_files": [
+        "AGENTS.md",
+        ".cursor/rules/looper-creator.mdc"
+      ],
+      "unsupported_capability_behavior": "block_and_report"
+    }
+  ],
+  "portability_policy": {
+    "canonical_manifest": "loop.json",
+    "adapter_outputs_are_generated": true,
+    "do_not_weaken_verification_for_platform_limits": true,
+    "unsupported_capability_behavior": "block_and_report",
+    "platform_selection_query": "Should this browser-testing loop run in Codex, Claude Code, Cursor, or portable mode?"
+  },
+  "failure_modes": [
+    {
+      "id": "automation-login-boundary",
+      "mitigation": "record as automation/session boundary unless a manual logged-in browser reproduces the same issue"
+    },
+    {
+      "id": "token-bloat-from-browser-logs",
+      "mitigation": "store raw artifacts on disk and summarize only signatures, routes, and failing evidence"
+    },
+    {
+      "id": "false-positive-bug-report",
+      "mitigation": "require reproduction steps and artifact references before confirmed status"
+    },
+    {
+      "id": "unsafe-admin-action",
+      "mitigation": "human gate before any mutation, export, approval, deletion, or permission change"
+    },
+    {
+      "id": "no-progress-route-loop",
+      "mitigation": "stop when visited route, screenshot count, and finding fingerprints stop changing"
+    }
+  ],
+  "templates": [
+    "website-browser-testing",
+    "testing-debugging",
+    "generic-task"
+  ],
+  "state": {
+    "path": "state.json",
+    "journal_path": "journal.jsonl",
+    "progress_path": "PROGRESS.md"
+  },
+  "observability": {
+    "trace_fields": [
+      "loop_node_id",
+      "task_id",
+      "agent_id",
+      "route",
+      "artifact_path",
+      "finding_id",
+      "exit_reason"
+    ],
+    "evidence_dir": "evidence"
+  },
+  "human_gates": {
+    "irreversible_actions": [
+      "create, update, approve, delete, publish, or export business data",
+      "change credentials, roles, permissions, or tenant settings",
+      "run load, destructive security, or exploit testing"
+    ],
+    "approval_record_path": "PROGRESS.md"
+  },
+  "escalation": {
+    "condition": "Login challenge, mutation requirement, privacy-sensitive data exposure, no-progress, or budget exit is reached.",
+    "owner": "human requester",
+    "channel": "Codex thread",
+    "message_template": "Website bug-hunt loop stopped: {reason}. Evidence: {evidence_ref}. Needed decision: {open_question}."
+  }
+}

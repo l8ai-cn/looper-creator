@@ -1,6 +1,6 @@
 ---
 name: looper-creator
-description: Create standardized Recursive Loop Orchestration projects for autonomous or semi-autonomous agents. Use when the user asks to create, scaffold, initialize, package, harden, or standardize an agent loop, recursive task loop, multi-agent workflow, self-running agent, Ralph-style loop, auto-fixer, monitor, documentation loop, deployment loop, bid-writing loop, or any project that should decompose work and iterate until machine-checkable completion.
+description: Create standardized Recursive Loop Orchestration projects for autonomous or semi-autonomous agents. Use when the user asks to create, scaffold, initialize, package, harden, or standardize an agent loop, recursive task loop, multi-agent workflow, self-running agent, Ralph-style loop, auto-fixer, monitor, browser-based website testing loop, documentation loop, deployment loop, bid-writing loop, or any project that should decompose work and iterate until machine-checkable completion.
 ---
 
 # Looper Creator
@@ -19,6 +19,9 @@ valid project uses `RecursiveLoopOrchestration` schema v2.0 and must define:
 - context and token policy for retrieval, trimming, compaction, and durable
   memory;
 - deterministic verification, protected verifier paths, and anti-gaming rules;
+- browser evidence review rules when a website-testing loop is requested:
+  raw findings must be deduplicated, token/JWT evidence must be scrubbed, and
+  navigation seeds must not become confirmed bugs without visible-route proof;
 - success, failure, budget, no-progress, human-gate, and escalation exits.
 
 Do not design fallback paths, silent degradation, or vague "best effort" terminal
@@ -29,8 +32,9 @@ a blocked loop, not a valid loop.
 
 1. **Choose the closest template**
    - Read `references/template-catalog.md` when the user asks for a known loop
-     type such as feature development, testing/debugging, deployment, technical
-     documentation, bid writing, research synthesis, or generic task execution.
+     type such as feature development, testing/debugging, browser-based website
+     testing, deployment, technical documentation, bid writing, research
+     synthesis, or generic task execution.
    - Start from a matching file in `examples/` when available.
 
 2. **Clarify before scaffolding**
@@ -89,6 +93,11 @@ a blocked loop, not a valid loop.
   artifacts just in time.
 - Treat tool output as expensive. Preserve commands, exit codes, failing
   assertions, changed paths, and evidence refs; trim noisy raw logs.
+- For browser-testing loops, do not trust raw automated findings directly.
+  Require a review pass that merges duplicate network failures, rejects
+  navigation-abort noise, separates seeded route leads from confirmed visible
+  route defects, and scans evidence for passwords, cookies, Authorization
+  headers, `access_token` values, and JWT-shaped strings.
 - Use deterministic verifiers for per-task, per-loop, and terminal checks. The
   agent's own completion statement is not evidence.
 - Stop on no progress by comparing manifest-defined fingerprints, not by asking

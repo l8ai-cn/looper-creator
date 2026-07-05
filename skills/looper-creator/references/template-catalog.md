@@ -28,6 +28,29 @@ Recommended node pattern:
 
 `reproduce -> isolate -> implement fix -> regression verify -> review`
 
+## website-browser-testing
+
+Use for read-only browser probes of public or authenticated websites, admin
+panels, and SaaS apps when the output is an evidence-backed bug list. Require
+target URL, credential reference instead of plaintext credentials, mutation
+boundary, browser artifacts, console/network summaries, screenshot evidence,
+secret/JWT scanning, and a review step that promotes only confirmed defects.
+
+Recommended node pattern:
+
+`scope/safety -> login/app-shell probe -> route/workflow probes -> evidence review -> bug-list verification`
+
+Important review rules:
+
+- Treat `networkidle` as unsafe for apps with polling or WebSockets; prefer DOM
+  readiness plus bounded waits.
+- Store raw browser logs on disk and put only distilled signatures in context.
+- Merge duplicate API failures by endpoint/status.
+- Do not promote seeded direct-route 404s unless visible navigation or product
+  requirements prove the route is user-facing.
+- Scrub passwords, cookies, Authorization headers, `access_token` values, and
+  JWT-shaped strings before writing evidence.
+
 ## deployment-release
 
 Use for release preparation and deployment workflows. Treat deployment as a

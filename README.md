@@ -49,8 +49,8 @@ The v2 manifest models:
 - context/token budget strategy
 - deterministic verification and anti-gaming rules
 - success, failure, budget, no-progress, human-gate, and escalation exits
-- common templates for feature development, testing/debugging, deployment,
-  documentation, bid writing, and generic tasks
+- common templates for feature development, testing/debugging, browser-based
+  website testing, deployment, documentation, bid writing, and generic tasks
 
 ## Repository Layout
 

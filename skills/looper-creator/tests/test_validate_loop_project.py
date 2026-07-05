@@ -321,6 +321,14 @@ class LooperCreatorValidationTests(unittest.TestCase):
         self.assertTrue(errors)
         self.assertTrue(any("clarification_policy" in error for error in errors))
 
+    def test_all_valid_examples_validate(self):
+        for path in sorted((SKILL_DIR / "examples").glob("*.loop.json")):
+            if path.name.startswith("invalid-"):
+                continue
+            with self.subTest(path=path.name):
+                manifest = load_manifest(path)
+                self.assertEqual([], validate_manifest(manifest))
+
     def test_plaintext_secret_key_is_rejected(self):
         manifest = recursive_manifest()
         manifest["verification_policy"]["token"] = "not-allowed"
