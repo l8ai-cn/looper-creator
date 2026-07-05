@@ -22,6 +22,12 @@ Record durable design, decomposition, verification, and escalation decisions.
 
 Link verifier outputs, review notes, task artifacts, and human approvals.
 
+## Acceptance Trace
+
+Record checked checklist items, reopened items, and the verifier/evidence refs
+that justified each transition.
+
 ## Next Cycle
 
-State the next eligible loop node or atomic task and its verifier.
+State the next eligible loop node or atomic task, its verifier, and the checklist
+item that may be checked if acceptance passes.

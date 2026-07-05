@@ -1,4 +1,6 @@
+import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -246,6 +248,21 @@ def recursive_manifest():
             {"id": "no-progress", "mitigation": "compare fingerprints and stop at threshold"},
         ],
         "templates": ["feature-development", "testing-debugging", "documentation-writing"],
+        "acceptance_checklist": {
+            "path": "ACCEPTANCE.md",
+            "update_policy": "one checklist item must be marked only after its verifier evidence exists",
+            "items": [
+                {
+                    "id": "accept-task-implement",
+                    "task_id": "task-implement",
+                    "description": "Implementation task is complete and verified.",
+                    "owner_agent": "reviewer",
+                    "acceptance_criteria": ["unit-tests verifier exits 0", "reviewer accepts diff"],
+                    "verification_refs": ["unit-tests"],
+                    "evidence_refs": ["source diff", "test diff"],
+                }
+            ],
+        },
         "state": {"path": "state.json", "journal_path": "journal.jsonl", "progress_path": "PROGRESS.md"},
         "observability": {
             "trace_fields": ["loop_node_id", "task_id", "agent_id", "verifier_id", "token_estimate"],
@@ -280,6 +297,7 @@ class LooperCreatorValidationTests(unittest.TestCase):
         for relative in [
             "LOOP.md",
             "PROGRESS.md",
+            "ACCEPTANCE.md",
             "loop.json",
             "loops.json",
             "tasks.json",
@@ -314,6 +332,47 @@ class LooperCreatorValidationTests(unittest.TestCase):
         manifest["portability_policy"]["unsupported_capability_behavior"] = "silent_skip"
         errors = validate_manifest(manifest)
         self.assertTrue(any("unsupported_capability_behavior" in error for error in errors))
+
+    def test_v2_requires_acceptance_checklist(self):
+        manifest = recursive_manifest()
+        del manifest["acceptance_checklist"]
+        errors = validate_manifest(manifest)
+        self.assertTrue(any("acceptance_checklist" in error for error in errors))
+
+    def test_v2_rejects_acceptance_checklist_path_traversal(self):
+        manifest = recursive_manifest()
+        manifest["acceptance_checklist"]["path"] = "../ACCEPTANCE.md"
+        errors = validate_manifest(manifest)
+        self.assertTrue(any("acceptance_checklist.path" in error and "relative" in error for error in errors))
+
+    def test_generated_project_contains_acceptance_checklist_and_verifier(self):
+        manifest = recursive_manifest()
+        self.assertEqual([], validate_manifest(manifest))
+        output = self.tmpdir / "generated-checklist"
+        create_project(manifest, output)
+        self.assertEqual([], validate_project(output))
+        checklist = output / "ACCEPTANCE.md"
+        self.assertTrue(checklist.exists())
+        checklist_text = checklist.read_text(encoding="utf-8")
+        self.assertIn("- [ ]", checklist_text)
+        self.assertIn("accept-task-implement", checklist_text)
+        verifier_script = (output / "scripts" / "verify.sh").read_text(encoding="utf-8")
+        self.assertIn("ACCEPTANCE.md", verifier_script)
+
+    def test_terminal_verifier_rejects_complete_state_with_unchecked_items(self):
+        manifest = recursive_manifest()
+        output = self.tmpdir / "generated-incomplete"
+        create_project(manifest, output)
+        result = subprocess.run(["bash", "scripts/verify.sh"], cwd=output, check=False)
+        self.assertEqual(0, result.returncode)
+
+        state_path = output / "state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state["status"] = "complete"
+        state_path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+        result = subprocess.run(["bash", "scripts/verify.sh"], cwd=output, check=False)
+        self.assertNotEqual(0, result.returncode)
 
     def test_invalid_manifest_is_rejected(self):
         manifest = load_manifest(SKILL_DIR / "examples" / "invalid-vague-goal.loop.json")

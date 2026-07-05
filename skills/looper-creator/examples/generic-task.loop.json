@@ -427,5 +427,28 @@
         "scope": "terminal"
       }
     ]
+  },
+  "acceptance_checklist": {
+    "path": "ACCEPTANCE.md",
+    "update_policy": "Only mark a checklist item complete after all acceptance criteria pass and verification refs have durable evidence artifacts.",
+    "items": [
+      {
+        "id": "accept-generic-task-task-1",
+        "task_id": "generic-task-task-1",
+        "description": "Execute the next independently verifiable task slice.",
+        "owner_agent": "worker",
+        "acceptance_criteria": [
+          "unit-tests verifier exits 0",
+          "reviewer accepts diff"
+        ],
+        "verification_refs": [
+          "unit-tests"
+        ],
+        "evidence_refs": [
+          "source diff",
+          "test diff"
+        ]
+      }
+    ]
   }
 }

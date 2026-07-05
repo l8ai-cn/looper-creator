@@ -604,5 +604,83 @@
     "owner": "human requester",
     "channel": "Codex thread",
     "message_template": "Website bug-hunt loop stopped: {reason}. Evidence: {evidence_ref}. Needed decision: {open_question}."
+  },
+  "acceptance_checklist": {
+    "path": "ACCEPTANCE.md",
+    "update_policy": "Only mark a checklist item complete after all acceptance criteria pass and verification refs have durable evidence artifacts.",
+    "items": [
+      {
+        "id": "accept-scope-and-safety",
+        "task_id": "scope-and-safety",
+        "description": "Record the target, credential reference, read-only boundary, and blocked mutation actions.",
+        "owner_agent": "orchestrator",
+        "acceptance_criteria": [
+          "PROGRESS.md states read-only scope",
+          "state.json does not contain plaintext password"
+        ],
+        "verification_refs": [
+          "no-secret-files"
+        ],
+        "evidence_refs": [
+          "PROGRESS.md",
+          "state.json"
+        ]
+      },
+      {
+        "id": "accept-login-and-shell-probe",
+        "task_id": "login-and-shell-probe",
+        "description": "Open the site, authenticate using the environment-backed credential, and capture app shell evidence without changing data.",
+        "owner_agent": "browser_worker",
+        "acceptance_criteria": [
+          "login result is recorded as success, blocked, or failed with evidence",
+          "no destructive action is clicked"
+        ],
+        "verification_refs": [
+          "browser-artifacts",
+          "no-secret-files"
+        ],
+        "evidence_refs": [
+          "evidence/login.png",
+          "evidence/app-shell.png",
+          "evidence/browser-summary.md"
+        ]
+      },
+      {
+        "id": "accept-navigation-and-error-probes",
+        "task_id": "navigation-and-error-probes",
+        "description": "Probe visible routes, empty/error/loading states, and console/network failures from the authenticated app shell.",
+        "owner_agent": "browser_worker",
+        "acceptance_criteria": [
+          "at least three reachable protected surfaces are checked when available",
+          "console errors and failed network requests are captured",
+          "blocked routes are labeled as automation/session boundary unless manually confirmed"
+        ],
+        "verification_refs": [
+          "browser-artifacts"
+        ],
+        "evidence_refs": [
+          "evidence/route-map.json",
+          "evidence/console-network.json",
+          "evidence/screenshots/"
+        ]
+      },
+      {
+        "id": "accept-bug-list-review",
+        "task_id": "bug-list-review",
+        "description": "Write a reproducible bug list from browser evidence and separate unconfirmed leads from confirmed defects.",
+        "owner_agent": "defect_reviewer",
+        "acceptance_criteria": [
+          "each confirmed bug includes severity, reproduction steps, expected behavior, actual behavior, evidence, and repair direction",
+          "uncertain findings are not promoted to confirmed bugs"
+        ],
+        "verification_refs": [
+          "bug-list-quality",
+          "terminal"
+        ],
+        "evidence_refs": [
+          "bug-list.md"
+        ]
+      }
+    ]
   }
 }

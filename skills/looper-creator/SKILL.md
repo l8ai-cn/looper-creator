@@ -13,6 +13,8 @@ valid project uses `RecursiveLoopOrchestration` schema v2.0 and must define:
 - recursive loop nodes, not a fixed one-level macro/micro loop;
 - atomic tasks with owners, dependencies, outputs, acceptance criteria, and
   verifier references;
+- an acceptance checklist with one traceable item per atomic task, checked only
+  after verifier-backed evidence exists;
 - clarification policy for ambiguous user requests and secondary user queries;
 - multi-agent collaboration policy with subagent activation limits;
 - execution adapters for Codex, Claude Code, Cursor, and portable runtimes;
@@ -48,6 +50,8 @@ a blocked loop, not a valid loop.
    - Keep secrets out of the manifest. Use references, not plaintext credentials.
    - Split work recursively through `loop_nodes`; split executable work through
      `atomic_tasks`.
+   - Define `acceptance_checklist.items` so every atomic task has a checkbox,
+     owner agent, criteria, verifier refs, and evidence refs.
 
 4. **Validate before generation**
    - Run:
@@ -70,7 +74,7 @@ a blocked loop, not a valid loop.
      ```bash
      python3 skills/looper-creator/scripts/validate_loop_project.py path/to/output-loop-project
      ```
-   - A valid project contains `LOOP.md`, `PROGRESS.md`, `loop.json`,
+   - A valid project contains `LOOP.md`, `PROGRESS.md`, `ACCEPTANCE.md`, `loop.json`,
      `loops.json`, `tasks.json`, `agents.json`, `context-policy.json`,
      `state.json`, `journal.jsonl`, `ADAPTERS.md`, runtime adapter files, and
      `scripts/verify.sh`.
@@ -93,6 +97,10 @@ a blocked loop, not a valid loop.
   artifacts just in time.
 - Treat tool output as expensive. Preserve commands, exit codes, failing
   assertions, changed paths, and evidence refs; trim noisy raw logs.
+- Treat `ACCEPTANCE.md` as the execution trace. Check exactly one item when its
+  atomic task is accepted; reopen it if later verification invalidates the
+  evidence. Terminal success requires all items checked and the terminal
+  verifier passing.
 - For browser-testing loops, do not trust raw automated findings directly.
   Require a review pass that merges duplicate network failures, rejects
   navigation-abort noise, separates seeded route leads from confirmed visible
@@ -135,6 +143,8 @@ Before finishing a Looper Creator task, verify:
 - The manifest validates.
 - The generated project validates.
 - Required files exist at the generated path.
+- `ACCEPTANCE.md` exists, contains one item per atomic task, and each checked
+  item has verifier-backed evidence.
 - The verifier script is executable.
 - Any real-world verifier that depends on external systems is either run and
   reported, or explicitly listed as unavailable.

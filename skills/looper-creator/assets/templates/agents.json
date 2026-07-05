@@ -5,7 +5,7 @@
     "model_class": "strong_reasoning",
     "responsibilities": ["maintain loop state", "dispatch atomic tasks", "decide exits"],
     "context_scope": "shared",
-    "may_modify": ["PROGRESS.md", "state.json", "tasks.json"]
+    "may_modify": ["PROGRESS.md", "ACCEPTANCE.md", "state.json", "tasks.json"]
   },
   {
     "id": "worker",
@@ -21,6 +21,6 @@
     "model_class": "strong_reasoning",
     "responsibilities": ["review output against acceptance criteria"],
     "context_scope": "review_private",
-    "may_modify": ["review report"]
+    "may_modify": ["review report", "ACCEPTANCE.md"]
   }
 ]

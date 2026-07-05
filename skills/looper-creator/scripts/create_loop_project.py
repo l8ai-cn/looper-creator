@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,6 +45,10 @@ def _terminal_verifier(manifest: dict[str, Any]) -> dict[str, Any]:
     return verifiers[0]
 
 
+def _checklist_path(manifest: dict[str, Any]) -> str:
+    return manifest["acceptance_checklist"]["path"]
+
+
 def render_loop_md(manifest: dict[str, Any]) -> str:
     metadata = manifest["metadata"]
     objective = manifest["objective"]
@@ -53,12 +58,16 @@ def render_loop_md(manifest: dict[str, Any]) -> str:
     context = manifest["context_policy"]
     termination = manifest["termination_policy"]
     verification = manifest["verification_policy"]
+    checklist = manifest["acceptance_checklist"]
     escalation = manifest["escalation"]
     gates = "\n".join(f"- {item}" for item in manifest["human_gates"]["irreversible_actions"]) or "- None"
     roots = "\n".join(f"- `{node['id']}`: {node['purpose']}" for node in manifest["loop_nodes"])
     tasks = "\n".join(f"- `{task['id']}`: {task['goal']}" for task in manifest["atomic_tasks"])
     agents = "\n".join(f"- `{agent['id']}` ({agent['role']}): {', '.join(agent['responsibilities'])}" for agent in manifest["agents"])
     verifiers = "\n".join(f"- `{item['id']}`: `{item['command']}`" for item in verification["verifiers"])
+    checklist_items = "\n".join(
+        f"- `{item['id']}`: {item['description']}" for item in checklist["items"]
+    )
 
     return f"""# {metadata['name']}
 
@@ -90,6 +99,13 @@ Split until:
 ## Atomic Tasks
 
 {tasks}
+
+## Acceptance Checklist
+
+- Path: `{checklist['path']}`
+- Update policy: {checklist['update_policy']}
+
+{checklist_items}
 
 ## Agents
 
@@ -138,7 +154,48 @@ Protected paths:
 """
 
 
+def render_acceptance_md(manifest: dict[str, Any]) -> str:
+    checklist = manifest["acceptance_checklist"]
+    lines = [
+        "# Acceptance Checklist",
+        "",
+        f"Loop: {_manifest_name(manifest)}",
+        "",
+        f"Update policy: {checklist['update_policy']}",
+        "",
+        "## Operating Rules",
+        "",
+        "- Only change `[ ]` to `[x]` after every acceptance criterion passes.",
+        "- Evidence refs must point to existing artifacts, command outputs, screenshots, logs, diffs, or review notes.",
+        "- If later verification invalidates an item, change it back to `[ ]` and record the reason in `PROGRESS.md`.",
+        "- Terminal completion may only be claimed when every checklist item is checked and the terminal verifier passes.",
+        "",
+        "## Items",
+        "",
+    ]
+    for item in checklist["items"]:
+        lines.extend(
+            [
+                f"- [ ] `{item['id']}`: {item['description']}",
+                f"  - Owner agent: `{item['owner_agent']}`",
+            ]
+        )
+        if item.get("task_id"):
+            lines.append(f"  - Atomic task: `{item['task_id']}`")
+        if item.get("loop_node_id"):
+            lines.append(f"  - Loop node: `{item['loop_node_id']}`")
+        lines.append("  - Acceptance criteria:")
+        lines.extend(f"    - {criterion}" for criterion in item["acceptance_criteria"])
+        lines.append("  - Verification refs:")
+        lines.extend(f"    - `{ref}`" for ref in item["verification_refs"])
+        lines.append("  - Evidence refs:")
+        lines.extend(f"    - {ref}" for ref in item["evidence_refs"])
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def render_progress_md(manifest: dict[str, Any]) -> str:
+    checklist_path = _checklist_path(manifest)
     return f"""# Progress
 
 Loop: {_manifest_name(manifest)}
@@ -160,12 +217,19 @@ Loop: {_manifest_name(manifest)}
 
 - Initial recursive loop contract generated from `loop.json`.
 
+## Acceptance Trace
+
+- Checklist path: `{checklist_path}`
+- Checked items: none
+- Reopened items: none
+
 ## Next Cycle
 
-1. Re-read `loop.json`, `state.json`, `tasks.json`, `agents.json`, and this file.
+1. Re-read `loop.json`, `state.json`, `tasks.json`, `agents.json`, `{checklist_path}`, and this file.
 2. Evaluate `clarification_policy` before acting.
 3. Execute one eligible loop node or atomic task.
-4. Record evidence and stop on success, failure, budget, no-progress, or human-gate conditions.
+4. Record evidence, then check exactly the matching acceptance item only if its criteria and verifier refs pass.
+5. Stop on success, failure, budget, no-progress, or human-gate conditions.
 """
 
 
@@ -206,6 +270,15 @@ def render_verify_sh(manifest: dict[str, Any]) -> str:
             "test -f agents.json",
             "test -f context-policy.json",
         ]
+    checklist_path = shlex.quote(_checklist_path(manifest))
+    state_path = shlex.quote(manifest["state"]["path"])
+    commands.extend(
+        [
+            f"test -s {checklist_path}",
+            f"grep -Eq -- '- \\[[ xX]\\]' {checklist_path}",
+            f"if grep -q '\"status\": \"complete\"' {state_path}; then ! grep -Eq -- '- \\[ \\]' {checklist_path}; fi",
+        ]
+    )
     body = "\n".join(commands)
     return f"""#!/usr/bin/env bash
 set -euo pipefail
@@ -247,6 +320,7 @@ Platform selection query: {portability['platform_selection_query']}
 
 
 def render_codex_agents_md(manifest: dict[str, Any]) -> str:
+    checklist_path = _checklist_path(manifest)
     return f"""# AGENTS.md
 
 This file adapts `{manifest['metadata']['name']}` for Codex.
@@ -255,7 +329,8 @@ Canonical loop contract: `loop.json`
 
 ## Execution Rules
 
-- Re-read `loop.json`, `state.json`, `PROGRESS.md`, `tasks.json`, and `agents.json` before each loop cycle.
+- Re-read `loop.json`, `state.json`, `PROGRESS.md`, `{checklist_path}`, `tasks.json`, and `agents.json` before each loop cycle.
+- Mark `{checklist_path}` items checked only after their criteria, verifier refs, and evidence refs are satisfied.
 - Use subagents only when `collaboration_policy.subagent_activation.allowed_when` applies.
 - Do not weaken `verification_policy.protected_paths` or terminal verifier commands.
 - Stop and report when a requested capability is unsupported by Codex.
@@ -269,6 +344,7 @@ a stricter runtime-specific verifier.
 
 
 def render_claude_md(manifest: dict[str, Any]) -> str:
+    checklist_path = _checklist_path(manifest)
     return f"""# CLAUDE.md
 
 This file adapts `{manifest['metadata']['name']}` for Claude Code.
@@ -277,7 +353,8 @@ Canonical loop contract: `loop.json`
 
 ## Execution Rules
 
-- Load `loop.json`, `state.json`, `PROGRESS.md`, `tasks.json`, and `agents.json` before acting.
+- Load `loop.json`, `state.json`, `PROGRESS.md`, `{checklist_path}`, `tasks.json`, and `agents.json` before acting.
+- Mark `{checklist_path}` items checked only after their criteria, verifier refs, and evidence refs are satisfied.
 - Use Claude Code subagents only when the manifest's subagent activation policy applies.
 - Use hooks only to enforce or observe the manifest contract; do not use hooks to bypass verification.
 - Stop and ask the user before irreversible actions listed in `human_gates.irreversible_actions`.
@@ -305,6 +382,7 @@ def render_claude_settings_json() -> str:
 
 
 def render_cursor_rule(manifest: dict[str, Any]) -> str:
+    checklist_path = _checklist_path(manifest)
     return f"""---
 description: Looper Creator runtime adapter for {manifest['metadata']['name']}
 alwaysApply: false
@@ -314,7 +392,8 @@ alwaysApply: false
 
 Canonical loop contract: `loop.json`
 
-- Load `loop.json`, `state.json`, `PROGRESS.md`, `tasks.json`, and `agents.json` before each loop cycle.
+- Load `loop.json`, `state.json`, `PROGRESS.md`, `{checklist_path}`, `tasks.json`, and `agents.json` before each loop cycle.
+- Mark `{checklist_path}` items checked only after their criteria, verifier refs, and evidence refs are satisfied.
 - Use Cursor subagents or cloud agents only when the manifest's activation policy applies.
 - Keep generated adapter files subordinate to `loop.json`.
 - Do not weaken verifiers for platform limits.
@@ -350,6 +429,7 @@ def create_project(manifest: dict[str, Any], output: Path, force: bool = False) 
     output.mkdir(parents=True, exist_ok=True)
     _write(output / "loop.json", _json(manifest))
     _write(output / "LOOP.md", render_loop_md(manifest))
+    _write(output / _checklist_path(manifest), render_acceptance_md(manifest))
     _write(output / state["progress_path"], render_progress_md(manifest))
     _write(output / state["path"], render_state_json(manifest))
     _write(output / state["journal_path"], "")

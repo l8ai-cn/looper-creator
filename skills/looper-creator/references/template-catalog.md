@@ -8,6 +8,10 @@ Every template should also select runtime adapters. Keep `loop.json` canonical
 and generate platform files from `execution_adapters`; do not edit adapter files
 as the source of truth.
 
+Every template must include `acceptance_checklist` and generate `ACCEPTANCE.md`.
+Use one checkbox per atomic task, bind each item to an owner agent, verifier
+refs, and durable evidence refs, and check items only after the evidence exists.
+
 ## feature-development
 
 Use for one scoped software feature. Start with clarification, decompose into

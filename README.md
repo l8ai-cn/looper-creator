@@ -25,6 +25,7 @@ A generated loop project contains:
 ```text
 LOOP.md
 PROGRESS.md
+ACCEPTANCE.md
 loop.json
 loops.json
 tasks.json
@@ -43,6 +44,8 @@ The v2 manifest models:
 
 - recursive loop nodes
 - atomic task decomposition
+- acceptance checklist items that must be checked only after verifier-backed
+  evidence exists
 - secondary user queries for ambiguous requests
 - multi-agent collaboration and subagent activation policy
 - execution adapters for Codex, Claude Code, Cursor, and portable runtimes
@@ -125,6 +128,12 @@ The dependency-free semantic validator is
 
 The schema is English-first and locale-aware through `metadata.locale`; user-facing
 content can be localized while structural fields remain stable.
+
+Each manifest must define `acceptance_checklist`. Generated projects write it to
+`ACCEPTANCE.md` by default. During execution, agents update one checkbox at a
+time only after its acceptance criteria, verifier refs, and evidence refs are
+satisfied. If `state.json` reaches `complete`, `scripts/verify.sh` rejects any
+remaining unchecked item.
 
 ## Runtime Adapters
 

@@ -56,6 +56,7 @@ REQUIRED_TOP_LEVEL = {
     "portability_policy",
     "failure_modes",
     "templates",
+    "acceptance_checklist",
     "state",
     "observability",
     "human_gates",
@@ -98,6 +99,17 @@ def _positive_int(value: Any) -> bool:
 
 def _positive_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and value > 0 and not isinstance(value, bool)
+
+
+def _safe_project_path(value: str) -> bool:
+    path = Path(value)
+    return not path.is_absolute() and ".." not in path.parts
+
+
+def _validate_project_path(value: Any, name: str, errors: list[str]) -> None:
+    _require(_non_empty_string(value), f"{name} must be non-empty", errors)
+    if isinstance(value, str) and value.strip():
+        _require(_safe_project_path(value), f"{name} must be relative and must not contain '..'", errors)
 
 
 def _string_list(value: Any, name: str, errors: list[str], min_items: int = 1) -> list[str]:
@@ -154,7 +166,7 @@ def _validate_clarification_policy(manifest: dict[str, Any], errors: list[str]) 
     _require(_positive_int(secondary.get("max_questions")), "clarification_policy.secondary_user_query.max_questions must be a positive integer", errors)
     assumption = _as_dict(policy.get("assumption_policy"), "clarification_policy.assumption_policy", errors)
     _require(_non_empty_string(assumption.get("allowed")), "clarification_policy.assumption_policy.allowed must be non-empty", errors)
-    _require(_non_empty_string(assumption.get("record_path")), "clarification_policy.assumption_policy.record_path must be non-empty", errors)
+    _validate_project_path(assumption.get("record_path"), "clarification_policy.assumption_policy.record_path", errors)
     _string_list(policy.get("block_if"), "clarification_policy.block_if", errors)
 
 
@@ -191,6 +203,53 @@ def _collect_loop_nodes(nodes: list[Any], errors: list[str], path: str, depth: i
             child_nodes = _as_list(children, f"{node_path}.children", errors)
             ids.update(_collect_loop_nodes(child_nodes, errors, f"{node_path}.children", depth + 1, max_depth))
     return ids
+
+
+def _validate_acceptance_checklist(
+    manifest: dict[str, Any],
+    errors: list[str],
+    task_ids: set[str],
+    loop_node_ids: set[str],
+    agent_ids: set[str],
+    verifier_ids: set[str],
+) -> None:
+    checklist = _as_dict(manifest.get("acceptance_checklist"), "acceptance_checklist", errors)
+    _validate_project_path(checklist.get("path"), "acceptance_checklist.path", errors)
+    _require(_non_empty_string(checklist.get("update_policy")), "acceptance_checklist.update_policy must be non-empty", errors)
+    item_ids: set[str] = set()
+    covered_tasks: set[str] = set()
+    for index, raw_item in enumerate(_as_list(checklist.get("items"), "acceptance_checklist.items", errors)):
+        path = f"acceptance_checklist.items[{index}]"
+        item = _as_dict(raw_item, path, errors)
+        item_id = item.get("id")
+        _require(_non_empty_string(item_id), f"{path}.id must be non-empty", errors)
+        if _non_empty_string(item_id):
+            _require(item_id not in item_ids, f"{path}.id duplicates another acceptance checklist item id", errors)
+            item_ids.add(item_id)
+        for key in ("description", "owner_agent"):
+            _require(_non_empty_string(item.get(key)), f"{path}.{key} must be non-empty", errors)
+        task_id = item.get("task_id")
+        loop_node_id = item.get("loop_node_id")
+        _require(
+            _non_empty_string(task_id) or _non_empty_string(loop_node_id),
+            f"{path} must reference task_id or loop_node_id",
+            errors,
+        )
+        if _non_empty_string(task_id):
+            _require(task_id in task_ids, f"{path}.task_id must reference an atomic task id", errors)
+            covered_tasks.add(task_id)
+        if _non_empty_string(loop_node_id):
+            _require(loop_node_id in loop_node_ids, f"{path}.loop_node_id must reference a loop node id", errors)
+        if _non_empty_string(item.get("owner_agent")):
+            _require(item["owner_agent"] in agent_ids, f"{path}.owner_agent must reference an agent id", errors)
+        _string_list(item.get("acceptance_criteria"), f"{path}.acceptance_criteria", errors)
+        refs = _string_list(item.get("verification_refs"), f"{path}.verification_refs", errors)
+        _string_list(item.get("evidence_refs"), f"{path}.evidence_refs", errors)
+        for ref in refs:
+            _require(ref in verifier_ids, f"{path}.verification_refs contains unknown verifier id: {ref}", errors)
+    missing_tasks = sorted(task_ids - covered_tasks)
+    for task_id in missing_tasks:
+        errors.append(f"acceptance_checklist.items must include a task_id item for atomic task: {task_id}")
 
 
 def _validate_atomic_tasks(manifest: dict[str, Any], errors: list[str], agent_ids: set[str], verifier_ids: set[str]) -> set[str]:
@@ -268,7 +327,7 @@ def _validate_context_policy(manifest: dict[str, Any], errors: list[str]) -> Non
     _require(_non_empty_string(compaction.get("summary_contract")), "context_policy.compaction.summary_contract must be non-empty", errors)
     durable = _as_dict(policy.get("durable_memory"), "context_policy.durable_memory", errors)
     for key in ("state_path", "journal_path", "progress_path"):
-        _require(_non_empty_string(durable.get(key)), f"context_policy.durable_memory.{key} must be non-empty", errors)
+        _validate_project_path(durable.get(key), f"context_policy.durable_memory.{key}", errors)
     _string_list(policy.get("excluded_context"), "context_policy.excluded_context", errors)
 
 
@@ -337,7 +396,9 @@ def _validate_execution_adapters(manifest: dict[str, Any], errors: list[str]) ->
         _require(isinstance(adapter.get("supports_subagents"), bool), f"{path}.supports_subagents must be boolean", errors)
         for key in ("subagent_activation", "deterministic_hooks", "approval_model", "context_reload_model"):
             _require(_non_empty_string(adapter.get(key)), f"{path}.{key} must be non-empty", errors)
-        _string_list(adapter.get("generated_files"), f"{path}.generated_files", errors, min_items=0)
+        generated_files = _string_list(adapter.get("generated_files"), f"{path}.generated_files", errors, min_items=0)
+        for relative in generated_files:
+            _validate_project_path(relative, f"{path}.generated_files[]", errors)
         _require(
             adapter.get("unsupported_capability_behavior") == UNSUPPORTED_CAPABILITY_BEHAVIOR,
             f"{path}.unsupported_capability_behavior must be '{UNSUPPORTED_CAPABILITY_BEHAVIOR}'",
@@ -381,13 +442,13 @@ def _validate_failure_modes(manifest: dict[str, Any], errors: list[str]) -> None
 def _validate_state_and_outputs(manifest: dict[str, Any], errors: list[str]) -> None:
     state = _as_dict(manifest.get("state"), "state", errors)
     for key in ("path", "journal_path", "progress_path"):
-        _require(_non_empty_string(state.get(key)), f"state.{key} must be non-empty", errors)
+        _validate_project_path(state.get(key), f"state.{key}", errors)
     observability = _as_dict(manifest.get("observability"), "observability", errors)
     _string_list(observability.get("trace_fields"), "observability.trace_fields", errors)
-    _require(_non_empty_string(observability.get("evidence_dir")), "observability.evidence_dir must be non-empty", errors)
+    _validate_project_path(observability.get("evidence_dir"), "observability.evidence_dir", errors)
     gates = _as_dict(manifest.get("human_gates"), "human_gates", errors)
     _string_list(gates.get("irreversible_actions"), "human_gates.irreversible_actions", errors, min_items=0)
-    _require(_non_empty_string(gates.get("approval_record_path")), "human_gates.approval_record_path must be non-empty", errors)
+    _validate_project_path(gates.get("approval_record_path"), "human_gates.approval_record_path", errors)
     escalation = _as_dict(manifest.get("escalation"), "escalation", errors)
     for key in ("condition", "owner", "channel", "message_template"):
         _require(_non_empty_string(escalation.get(key)), f"escalation.{key} must be non-empty", errors)
@@ -411,12 +472,13 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
     verifier_ids = _validate_verification_policy(manifest, errors)
 
     loop_nodes = _as_list(manifest.get("loop_nodes"), "loop_nodes", errors)
-    _collect_loop_nodes(loop_nodes, errors, "loop_nodes", depth=1, max_depth=max_depth)
+    loop_node_ids = _collect_loop_nodes(loop_nodes, errors, "loop_nodes", depth=1, max_depth=max_depth)
 
     for index, raw_node in enumerate(loop_nodes):
         _validate_loop_node_references(raw_node, f"loop_nodes[{index}]", errors, agent_ids, verifier_ids)
 
-    _validate_atomic_tasks(manifest, errors, agent_ids, verifier_ids)
+    task_ids = _validate_atomic_tasks(manifest, errors, agent_ids, verifier_ids)
+    _validate_acceptance_checklist(manifest, errors, task_ids, loop_node_ids, agent_ids, verifier_ids)
     _validate_collaboration_policy(manifest, errors)
     _validate_context_policy(manifest, errors)
     _validate_termination_policy(manifest, errors)
@@ -483,6 +545,9 @@ def validate_project(path: Path) -> list[str]:
         state.get("progress_path", "PROGRESS.md"),
         "scripts/verify.sh",
     ]
+    checklist = manifest.get("acceptance_checklist", {}) if isinstance(manifest.get("acceptance_checklist"), dict) else {}
+    if isinstance(checklist.get("path"), str):
+        required_files.append(checklist["path"])
     for relative in required_files:
         if isinstance(relative, str):
             _require((path / relative).exists(), f"missing generated file: {relative}", errors)

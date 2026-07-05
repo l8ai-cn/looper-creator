@@ -30,6 +30,12 @@ List loop nodes as a recursive task graph. Each node needs:
 
 Each task must be independently verifiable and fit inside its context budget.
 
+## Acceptance Checklist
+
+Define the `ACCEPTANCE.md` path, update policy, and one checklist item per
+atomic task. A checkbox may be checked only after criteria, verifier refs, and
+evidence refs are satisfied.
+
 ## Agents
 
 Define orchestrator, worker, reviewer, verifier, and domain specialist roles only
