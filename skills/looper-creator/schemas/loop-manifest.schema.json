@@ -20,6 +20,8 @@
     "verification_policy",
     "cost_policy",
     "risk_policy",
+    "execution_adapters",
+    "portability_policy",
     "failure_modes",
     "templates",
     "state",
@@ -110,6 +112,12 @@
     "verification_policy": { "$ref": "#/$defs/verification_policy" },
     "cost_policy": { "$ref": "#/$defs/cost_policy" },
     "risk_policy": { "$ref": "#/$defs/risk_policy" },
+    "execution_adapters": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/execution_adapter" }
+    },
+    "portability_policy": { "$ref": "#/$defs/portability_policy" },
     "failure_modes": {
       "type": "array",
       "minItems": 1,
@@ -334,6 +342,48 @@
         "risk_levels": { "$ref": "#/$defs/string_array" },
         "high_risk_requires_human": { "$ref": "#/$defs/string_array" },
         "forbidden_behaviors": { "$ref": "#/$defs/string_array" }
+      }
+    },
+    "execution_adapter": {
+      "type": "object",
+      "required": [
+        "target",
+        "instruction_files",
+        "supports_subagents",
+        "subagent_activation",
+        "deterministic_hooks",
+        "approval_model",
+        "context_reload_model",
+        "generated_files",
+        "unsupported_capability_behavior"
+      ],
+      "properties": {
+        "target": { "enum": ["codex", "claude_code", "cursor", "portable"] },
+        "instruction_files": { "$ref": "#/$defs/string_array" },
+        "supports_subagents": { "type": "boolean" },
+        "subagent_activation": { "$ref": "#/$defs/non_empty_string" },
+        "deterministic_hooks": { "$ref": "#/$defs/non_empty_string" },
+        "approval_model": { "$ref": "#/$defs/non_empty_string" },
+        "context_reload_model": { "$ref": "#/$defs/non_empty_string" },
+        "generated_files": { "$ref": "#/$defs/string_array" },
+        "unsupported_capability_behavior": { "const": "block_and_report" }
+      }
+    },
+    "portability_policy": {
+      "type": "object",
+      "required": [
+        "canonical_manifest",
+        "adapter_outputs_are_generated",
+        "do_not_weaken_verification_for_platform_limits",
+        "unsupported_capability_behavior",
+        "platform_selection_query"
+      ],
+      "properties": {
+        "canonical_manifest": { "const": "loop.json" },
+        "adapter_outputs_are_generated": { "const": true },
+        "do_not_weaken_verification_for_platform_limits": { "const": true },
+        "unsupported_capability_behavior": { "const": "block_and_report" },
+        "platform_selection_query": { "$ref": "#/$defs/non_empty_string" }
       }
     }
   }

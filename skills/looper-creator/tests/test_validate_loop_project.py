@@ -198,6 +198,48 @@ def recursive_manifest():
             "high_risk_requires_human": ["security", "production data", "billing", "deployment"],
             "forbidden_behaviors": ["silent fallback", "weakening validation", "storing plaintext secrets"],
         },
+        "execution_adapters": [
+            {
+                "target": "codex",
+                "instruction_files": ["AGENTS.md"],
+                "supports_subagents": True,
+                "subagent_activation": "explicit_request",
+                "deterministic_hooks": "not_assumed",
+                "approval_model": "sandbox_and_policy",
+                "context_reload_model": "session_instruction_discovery",
+                "generated_files": ["AGENTS.md"],
+                "unsupported_capability_behavior": "block_and_report",
+            },
+            {
+                "target": "claude_code",
+                "instruction_files": ["CLAUDE.md"],
+                "supports_subagents": True,
+                "subagent_activation": "description_or_explicit_agent",
+                "deterministic_hooks": "supported",
+                "approval_model": "permissions_and_hooks",
+                "context_reload_model": "CLAUDE.md_and_memory",
+                "generated_files": ["CLAUDE.md", ".claude/settings.json"],
+                "unsupported_capability_behavior": "block_and_report",
+            },
+            {
+                "target": "cursor",
+                "instruction_files": ["AGENTS.md", ".cursor/rules/looper-creator.mdc"],
+                "supports_subagents": True,
+                "subagent_activation": "cursor_subagents_or_cloud_agents",
+                "deterministic_hooks": "supported_when_configured",
+                "approval_model": "cursor_agent_security",
+                "context_reload_model": "rules_skills_mentions",
+                "generated_files": [".cursor/rules/looper-creator.mdc"],
+                "unsupported_capability_behavior": "block_and_report",
+            },
+        ],
+        "portability_policy": {
+            "canonical_manifest": "loop.json",
+            "adapter_outputs_are_generated": True,
+            "do_not_weaken_verification_for_platform_limits": True,
+            "unsupported_capability_behavior": "block_and_report",
+            "platform_selection_query": "Which agent runtime should this loop target: codex, claude_code, cursor, or portable?",
+        },
         "failure_modes": [
             {"id": "vague-objective", "mitigation": "trigger clarification_policy.secondary_user_query"},
             {"id": "context-bloat", "mitigation": "trim tool outputs and compact at threshold"},
@@ -243,6 +285,11 @@ class LooperCreatorValidationTests(unittest.TestCase):
             "tasks.json",
             "agents.json",
             "context-policy.json",
+            "ADAPTERS.md",
+            "AGENTS.md",
+            "CLAUDE.md",
+            ".claude/settings.json",
+            ".cursor/rules/looper-creator.mdc",
             "scripts/verify.sh",
         ]:
             self.assertTrue((output / relative).exists(), relative)
@@ -260,6 +307,13 @@ class LooperCreatorValidationTests(unittest.TestCase):
         manifest["collaboration_policy"]["subagent_activation"]["token_budget_policy"] = ""
         errors = validate_manifest(manifest)
         self.assertTrue(any("token_budget_policy" in error for error in errors))
+
+    def test_v2_rejects_adapter_silent_degradation(self):
+        manifest = recursive_manifest()
+        manifest["execution_adapters"][0]["unsupported_capability_behavior"] = "silent_skip"
+        manifest["portability_policy"]["unsupported_capability_behavior"] = "silent_skip"
+        errors = validate_manifest(manifest)
+        self.assertTrue(any("unsupported_capability_behavior" in error for error in errors))
 
     def test_invalid_manifest_is_rejected(self):
         manifest = load_manifest(SKILL_DIR / "examples" / "invalid-vague-goal.loop.json")

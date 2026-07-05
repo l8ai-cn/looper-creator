@@ -23,6 +23,8 @@ LOOP_NODE_TYPES = {
     "human_review_gate",
 }
 CLARIFICATION_ACTIONS = {"ask_user", "make_low_risk_assumption", "generate_options", "block_until_answer"}
+ADAPTER_TARGETS = {"codex", "claude_code", "cursor", "portable"}
+UNSUPPORTED_CAPABILITY_BEHAVIOR = "block_and_report"
 UNSAFE_COMMAND_FRAGMENTS = ("|| true", "continue-on-error", "set +e")
 FORBIDDEN_SECRET_KEYS = {
     "password",
@@ -50,6 +52,8 @@ REQUIRED_TOP_LEVEL = {
     "verification_policy",
     "cost_policy",
     "risk_policy",
+    "execution_adapters",
+    "portability_policy",
     "failure_modes",
     "templates",
     "state",
@@ -318,6 +322,54 @@ def _validate_risk_policy(manifest: dict[str, Any], errors: list[str]) -> None:
     _require(any("silent fallback" in item.lower() for item in forbidden), "risk_policy.forbidden_behaviors must forbid silent fallback", errors)
 
 
+def _validate_execution_adapters(manifest: dict[str, Any], errors: list[str]) -> None:
+    seen_targets: set[str] = set()
+    adapters = _as_list(manifest.get("execution_adapters"), "execution_adapters", errors)
+    for index, raw_adapter in enumerate(adapters):
+        path = f"execution_adapters[{index}]"
+        adapter = _as_dict(raw_adapter, path, errors)
+        target = adapter.get("target")
+        _require(target in ADAPTER_TARGETS, f"{path}.target must be codex, claude_code, cursor, or portable", errors)
+        if target in ADAPTER_TARGETS:
+            _require(target not in seen_targets, f"{path}.target duplicates another adapter target", errors)
+            seen_targets.add(target)
+        _string_list(adapter.get("instruction_files"), f"{path}.instruction_files", errors)
+        _require(isinstance(adapter.get("supports_subagents"), bool), f"{path}.supports_subagents must be boolean", errors)
+        for key in ("subagent_activation", "deterministic_hooks", "approval_model", "context_reload_model"):
+            _require(_non_empty_string(adapter.get(key)), f"{path}.{key} must be non-empty", errors)
+        _string_list(adapter.get("generated_files"), f"{path}.generated_files", errors, min_items=0)
+        _require(
+            adapter.get("unsupported_capability_behavior") == UNSUPPORTED_CAPABILITY_BEHAVIOR,
+            f"{path}.unsupported_capability_behavior must be '{UNSUPPORTED_CAPABILITY_BEHAVIOR}'",
+            errors,
+        )
+
+
+def _validate_portability_policy(manifest: dict[str, Any], errors: list[str]) -> None:
+    policy = _as_dict(manifest.get("portability_policy"), "portability_policy", errors)
+    _require(policy.get("canonical_manifest") == "loop.json", "portability_policy.canonical_manifest must be 'loop.json'", errors)
+    _require(
+        policy.get("adapter_outputs_are_generated") is True,
+        "portability_policy.adapter_outputs_are_generated must be true",
+        errors,
+    )
+    _require(
+        policy.get("do_not_weaken_verification_for_platform_limits") is True,
+        "portability_policy.do_not_weaken_verification_for_platform_limits must be true",
+        errors,
+    )
+    _require(
+        policy.get("unsupported_capability_behavior") == UNSUPPORTED_CAPABILITY_BEHAVIOR,
+        f"portability_policy.unsupported_capability_behavior must be '{UNSUPPORTED_CAPABILITY_BEHAVIOR}'",
+        errors,
+    )
+    _require(
+        _non_empty_string(policy.get("platform_selection_query")),
+        "portability_policy.platform_selection_query must be non-empty",
+        errors,
+    )
+
+
 def _validate_failure_modes(manifest: dict[str, Any], errors: list[str]) -> None:
     for index, raw_mode in enumerate(_as_list(manifest.get("failure_modes"), "failure_modes", errors)):
         path = f"failure_modes[{index}]"
@@ -370,6 +422,8 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
     _validate_termination_policy(manifest, errors)
     _validate_cost_policy(manifest, errors, agent_ids)
     _validate_risk_policy(manifest, errors)
+    _validate_execution_adapters(manifest, errors)
+    _validate_portability_policy(manifest, errors)
     _validate_failure_modes(manifest, errors)
     _string_list(manifest.get("templates"), "templates", errors)
     _validate_state_and_outputs(manifest, errors)
@@ -423,6 +477,7 @@ def validate_project(path: Path) -> list[str]:
         "tasks.json",
         "agents.json",
         "context-policy.json",
+        "ADAPTERS.md",
         state.get("path", "state.json"),
         state.get("journal_path", "journal.jsonl"),
         state.get("progress_path", "PROGRESS.md"),
@@ -431,6 +486,12 @@ def validate_project(path: Path) -> list[str]:
     for relative in required_files:
         if isinstance(relative, str):
             _require((path / relative).exists(), f"missing generated file: {relative}", errors)
+
+    for adapter in manifest.get("execution_adapters", []):
+        if isinstance(adapter, dict):
+            for relative in adapter.get("generated_files", []):
+                if isinstance(relative, str):
+                    _require((path / relative).exists(), f"missing adapter generated file: {relative}", errors)
 
     verify_path = path / "scripts" / "verify.sh"
     if verify_path.exists():

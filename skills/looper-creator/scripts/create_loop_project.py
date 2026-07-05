@@ -216,6 +216,128 @@ set -euo pipefail
 """
 
 
+def render_adapters_md(manifest: dict[str, Any]) -> str:
+    portability = manifest["portability_policy"]
+    rows = []
+    for adapter in manifest["execution_adapters"]:
+        rows.append(
+            "| {target} | {instructions} | {subagents} | {hooks} | {generated} |".format(
+                target=adapter["target"],
+                instructions=", ".join(adapter["instruction_files"]),
+                subagents=str(adapter["supports_subagents"]).lower(),
+                hooks=adapter["deterministic_hooks"],
+                generated=", ".join(adapter["generated_files"]) or "none",
+            )
+        )
+    return f"""# Agent Runtime Adapters
+
+Canonical manifest: `{portability['canonical_manifest']}`
+
+Adapter outputs are generated artifacts. Do not edit them as the source of truth;
+update `loop.json` and regenerate.
+
+Unsupported capability behavior: `{portability['unsupported_capability_behavior']}`
+
+Platform selection query: {portability['platform_selection_query']}
+
+| Target | Instruction Files | Supports Subagents | Hooks | Generated Files |
+| --- | --- | --- | --- | --- |
+{chr(10).join(rows)}
+"""
+
+
+def render_codex_agents_md(manifest: dict[str, Any]) -> str:
+    return f"""# AGENTS.md
+
+This file adapts `{manifest['metadata']['name']}` for Codex.
+
+Canonical loop contract: `loop.json`
+
+## Execution Rules
+
+- Re-read `loop.json`, `state.json`, `PROGRESS.md`, `tasks.json`, and `agents.json` before each loop cycle.
+- Use subagents only when `collaboration_policy.subagent_activation.allowed_when` applies.
+- Do not weaken `verification_policy.protected_paths` or terminal verifier commands.
+- Stop and report when a requested capability is unsupported by Codex.
+- Gate irreversible actions listed in `human_gates.irreversible_actions`.
+
+## Verification
+
+Run `bash scripts/verify.sh` for terminal verification unless the manifest defines
+a stricter runtime-specific verifier.
+"""
+
+
+def render_claude_md(manifest: dict[str, Any]) -> str:
+    return f"""# CLAUDE.md
+
+This file adapts `{manifest['metadata']['name']}` for Claude Code.
+
+Canonical loop contract: `loop.json`
+
+## Execution Rules
+
+- Load `loop.json`, `state.json`, `PROGRESS.md`, `tasks.json`, and `agents.json` before acting.
+- Use Claude Code subagents only when the manifest's subagent activation policy applies.
+- Use hooks only to enforce or observe the manifest contract; do not use hooks to bypass verification.
+- Stop and ask the user before irreversible actions listed in `human_gates.irreversible_actions`.
+- If a manifest capability is unsupported in Claude Code, block and report instead of silently skipping it.
+"""
+
+
+def render_claude_settings_json() -> str:
+    settings = {
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": "Bash",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "python3 scripts/validate_loop_project.py . >/dev/null 2>&1 || true"
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+    return _json(settings)
+
+
+def render_cursor_rule(manifest: dict[str, Any]) -> str:
+    return f"""---
+description: Looper Creator runtime adapter for {manifest['metadata']['name']}
+alwaysApply: false
+---
+
+# Looper Creator Cursor Adapter
+
+Canonical loop contract: `loop.json`
+
+- Load `loop.json`, `state.json`, `PROGRESS.md`, `tasks.json`, and `agents.json` before each loop cycle.
+- Use Cursor subagents or cloud agents only when the manifest's activation policy applies.
+- Keep generated adapter files subordinate to `loop.json`.
+- Do not weaken verifiers for platform limits.
+- If a capability is unsupported in Cursor, block and report rather than silently skipping it.
+"""
+
+
+def generate_adapter_files(manifest: dict[str, Any], output: Path) -> None:
+    _write(output / "ADAPTERS.md", render_adapters_md(manifest))
+    for adapter in manifest["execution_adapters"]:
+        target = adapter["target"]
+        generated = set(adapter.get("generated_files", []))
+        if target == "codex" and "AGENTS.md" in generated:
+            _write(output / "AGENTS.md", render_codex_agents_md(manifest))
+        if target == "claude_code":
+            if "CLAUDE.md" in generated:
+                _write(output / "CLAUDE.md", render_claude_md(manifest))
+            if ".claude/settings.json" in generated:
+                _write(output / ".claude" / "settings.json", render_claude_settings_json())
+        if target == "cursor" and ".cursor/rules/looper-creator.mdc" in generated:
+            _write(output / ".cursor" / "rules" / "looper-creator.mdc", render_cursor_rule(manifest))
+
+
 def create_project(manifest: dict[str, Any], output: Path, force: bool = False) -> None:
     errors = validate_manifest(manifest)
     if errors:
@@ -237,6 +359,7 @@ def create_project(manifest: dict[str, Any], output: Path, force: bool = False) 
     _write(output / "context-policy.json", _json(manifest["context_policy"]))
     (output / manifest["observability"]["evidence_dir"]).mkdir(parents=True, exist_ok=True)
     _write(output / "scripts" / "verify.sh", render_verify_sh(manifest), executable=True)
+    generate_adapter_files(manifest, output)
 
 
 def main(argv: list[str] | None = None) -> int:

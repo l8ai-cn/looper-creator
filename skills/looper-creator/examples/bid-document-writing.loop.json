@@ -176,6 +176,55 @@
     "message_template": "Loop Bid Document Writing Loop stopped: {reason}. Evidence: {evidence_ref}.",
     "owner": "human maintainer"
   },
+  "execution_adapters": [
+    {
+      "approval_model": "sandbox_and_policy",
+      "context_reload_model": "session_instruction_discovery",
+      "deterministic_hooks": "not_assumed",
+      "generated_files": [
+        "AGENTS.md"
+      ],
+      "instruction_files": [
+        "AGENTS.md"
+      ],
+      "subagent_activation": "explicit_request",
+      "supports_subagents": true,
+      "target": "codex",
+      "unsupported_capability_behavior": "block_and_report"
+    },
+    {
+      "approval_model": "permissions_and_hooks",
+      "context_reload_model": "CLAUDE.md_and_memory",
+      "deterministic_hooks": "supported",
+      "generated_files": [
+        "CLAUDE.md",
+        ".claude/settings.json"
+      ],
+      "instruction_files": [
+        "CLAUDE.md"
+      ],
+      "subagent_activation": "description_or_explicit_agent",
+      "supports_subagents": true,
+      "target": "claude_code",
+      "unsupported_capability_behavior": "block_and_report"
+    },
+    {
+      "approval_model": "cursor_agent_security",
+      "context_reload_model": "rules_skills_mentions",
+      "deterministic_hooks": "supported_when_configured",
+      "generated_files": [
+        ".cursor/rules/looper-creator.mdc"
+      ],
+      "instruction_files": [
+        "AGENTS.md",
+        ".cursor/rules/looper-creator.mdc"
+      ],
+      "subagent_activation": "cursor_subagents_or_cloud_agents",
+      "supports_subagents": true,
+      "target": "cursor",
+      "unsupported_capability_behavior": "block_and_report"
+    }
+  ],
   "failure_modes": [
     {
       "id": "vague-objective",
@@ -290,6 +339,13 @@
       "verifier_id",
       "token_estimate"
     ]
+  },
+  "portability_policy": {
+    "adapter_outputs_are_generated": true,
+    "canonical_manifest": "loop.json",
+    "do_not_weaken_verification_for_platform_limits": true,
+    "platform_selection_query": "Which agent runtime should this loop target: codex, claude_code, cursor, or portable?",
+    "unsupported_capability_behavior": "block_and_report"
   },
   "risk_policy": {
     "forbidden_behaviors": [

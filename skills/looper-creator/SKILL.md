@@ -15,6 +15,7 @@ valid project uses `RecursiveLoopOrchestration` schema v2.0 and must define:
   verifier references;
 - clarification policy for ambiguous user requests and secondary user queries;
 - multi-agent collaboration policy with subagent activation limits;
+- execution adapters for Codex, Claude Code, Cursor, and portable runtimes;
 - context and token policy for retrieval, trimming, compaction, and durable
   memory;
 - deterministic verification, protected verifier paths, and anti-gaming rules;
@@ -67,13 +68,20 @@ a blocked loop, not a valid loop.
      ```
    - A valid project contains `LOOP.md`, `PROGRESS.md`, `loop.json`,
      `loops.json`, `tasks.json`, `agents.json`, `context-policy.json`,
-     `state.json`, `journal.jsonl`, and `scripts/verify.sh`.
+     `state.json`, `journal.jsonl`, `ADAPTERS.md`, runtime adapter files, and
+     `scripts/verify.sh`.
 
 ## Design Rules
 
 - Represent task decomposition as a recursive graph of loop nodes. A node may be
   a workflow, agent loop, reflection loop, evaluator-optimizer loop, parallel
   section, handoff loop, or human review gate.
+- Treat `loop.json` as the canonical manifest. Platform files such as
+  `AGENTS.md`, `CLAUDE.md`, and `.cursor/rules/looper-creator.mdc` are generated
+  adapters, not the source of truth.
+- Do not weaken verification for platform limits. If a runtime lacks hooks,
+  subagents, or another declared capability, block and report rather than
+  silently degrading the loop.
 - Use multi-agent execution only when the manifest's activation policy justifies
   it: independent tasks, context too large for one agent, independent review
   needed, or domain specialization required.
@@ -99,6 +107,17 @@ a blocked loop, not a valid loop.
   example.
 - `references/template-catalog.md`: Template selection guidance.
 - `assets/templates/`: Static project skeleton templates.
+
+## Runtime Adapter Targets
+
+- `codex`: generate `AGENTS.md`; subagents are explicit and must respect the
+  active sandbox and approval policy.
+- `claude_code`: generate `CLAUDE.md` and optional `.claude/settings.json`;
+  hooks may enforce checks, but must not bypass verification.
+- `cursor`: generate `.cursor/rules/looper-creator.mdc`; rules and subagents
+  must remain subordinate to `loop.json`.
+- `portable`: generate generic project artifacts when no platform-specific
+  runtime is selected.
 
 ## Acceptance Criteria
 

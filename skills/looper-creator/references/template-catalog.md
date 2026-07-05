@@ -4,6 +4,10 @@ Use this catalog to choose the nearest starting template before writing a
 manifest. Each template still needs task-specific objective, context, verifier,
 budget, and human-gate values.
 
+Every template should also select runtime adapters. Keep `loop.json` canonical
+and generate platform files from `execution_adapters`; do not edit adapter files
+as the source of truth.
+
 ## feature-development
 
 Use for one scoped software feature. Start with clarification, decompose into
@@ -68,3 +72,14 @@ Recommended node pattern:
 Use when no domain template fits. Clarify ambiguous goals, recursively split into
 verifiable atomic tasks, use subagents only when token economics justify them,
 and stop on machine-checkable completion or explicit escalation.
+
+## Adapter Selection
+
+- Use `codex` when the loop will be executed in Codex and should emit `AGENTS.md`.
+- Use `claude_code` when the loop should emit `CLAUDE.md` and optional hook
+  settings.
+- Use `cursor` when the loop should emit Cursor rules.
+- Use `portable` when no platform-specific execution surface is known yet.
+
+If the selected runtime lacks a capability, keep the manifest invalid or blocked
+until the user chooses an explicit alternative. Do not design silent fallback.

@@ -23,6 +23,10 @@ context-policy.json
 state.json
 journal.jsonl
 scripts/verify.sh
+ADAPTERS.md
+AGENTS.md
+CLAUDE.md
+.cursor/rules/looper-creator.mdc
 ```
 
 The v2 manifest models:
@@ -31,6 +35,7 @@ The v2 manifest models:
 - atomic task decomposition
 - secondary user queries for ambiguous requests
 - multi-agent collaboration and subagent activation policy
+- execution adapters for Codex, Claude Code, Cursor, and portable runtimes
 - context/token budget strategy
 - deterministic verification and anti-gaming rules
 - success, failure, budget, no-progress, human-gate, and escalation exits
@@ -110,6 +115,19 @@ The dependency-free semantic validator is
 
 The schema is English-first and locale-aware through `metadata.locale`; user-facing
 content can be localized while structural fields remain stable.
+
+## Runtime Adapters
+
+`loop.json` is the canonical manifest. Runtime-specific files are generated from
+`execution_adapters`:
+
+- Codex: `AGENTS.md`
+- Claude Code: `CLAUDE.md` and optional `.claude/settings.json`
+- Cursor: `.cursor/rules/looper-creator.mdc`
+- Portable: generic files only
+
+Adapter limits must not weaken verification. If a runtime cannot support a
+declared capability, the required behavior is `block_and_report`.
 
 ## License
 
