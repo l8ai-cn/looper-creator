@@ -1,55 +1,58 @@
 ---
 name: looper-creator
-description: Create standardized, verifiable loop projects for autonomous or semi-autonomous agents. Use when the user asks to create, scaffold, initialize, package, harden, or standardize an agent loop, long-running workflow, self-running agent, Ralph-style loop, cron/heartbeat/hook/goal loop, auto-fixer, monitor, or any project that should keep iterating until a machine-checkable condition is met.
+description: Create standardized Recursive Loop Orchestration projects for autonomous or semi-autonomous agents. Use when the user asks to create, scaffold, initialize, package, harden, or standardize an agent loop, recursive task loop, multi-agent workflow, self-running agent, Ralph-style loop, auto-fixer, monitor, documentation loop, deployment loop, bid-writing loop, or any project that should decompose work and iterate until machine-checkable completion.
 ---
 
 # Looper Creator
 
 ## Purpose
 
-Use this skill to create a loop project, not merely describe one. A valid output
-must include durable state, deterministic verification, explicit exits, budget
-limits, no-progress detection, and a human escalation path.
+Use this skill to create a concrete loop project, not merely describe one. A
+valid project uses `RecursiveLoopOrchestration` schema v2.0 and must define:
 
-This skill complements `loop-engineering`: use loop-engineering principles to
-design the loop, then use this skill's contract and scripts to generate and
-validate a concrete project skeleton.
+- recursive loop nodes, not a fixed one-level macro/micro loop;
+- atomic tasks with owners, dependencies, outputs, acceptance criteria, and
+  verifier references;
+- clarification policy for ambiguous user requests and secondary user queries;
+- multi-agent collaboration policy with subagent activation limits;
+- context and token policy for retrieval, trimming, compaction, and durable
+  memory;
+- deterministic verification, protected verifier paths, and anti-gaming rules;
+- success, failure, budget, no-progress, human-gate, and escalation exits.
 
-## Non-Negotiables
-
-Reject or pause any loop request that cannot define these fields:
-
-- Trigger: heartbeat, cron, hook, or goal.
-- Observation: the single check performed each cycle.
-- Action: one scoped action per cycle.
-- Success: a machine-checkable condition.
-- Failure: an unrecoverable or retry-exhausted condition.
-- Verifier: a deterministic command or external check.
-- Budgets: max iterations, wall-clock cap, and token/cost cap when applicable.
-- No-progress rule: a fingerprint and stale-iteration threshold.
-- State: file paths for current state and append-only journal.
-- Escalation: owner, channel, condition, and human-readable message.
-- Human gate: any irreversible or outward-facing action that must stop for approval.
-
-Do not create fallback paths, silent degradation, or "best effort" success states
-to make a vague loop look valid. A loop without a verifier or stop condition is
-blocked, not partially complete.
+Do not design fallback paths, silent degradation, or vague "best effort" terminal
+states. Missing verification, unclear authority, or ambiguous success criteria is
+a blocked loop, not a valid loop.
 
 ## Workflow
 
-1. **Create the loop manifest**
-   - Copy `examples/minimal-valid.loop.json` or write an equivalent manifest.
-   - Use `schemas/loop-manifest.schema.json` as the contract reference.
-   - Keep secrets out of the manifest. Store only secret references.
+1. **Choose the closest template**
+   - Read `references/template-catalog.md` when the user asks for a known loop
+     type such as feature development, testing/debugging, deployment, technical
+     documentation, bid writing, research synthesis, or generic task execution.
+   - Start from a matching file in `examples/` when available.
 
-2. **Validate before generating**
+2. **Clarify before scaffolding**
+   - Apply `clarification_policy` before generating files.
+   - Ask a secondary user query when goal, acceptance criteria, verification,
+     permissions, data impact, production impact, or delivery target is unclear.
+   - Make only low-risk assumptions and record them in `PROGRESS.md`.
+
+3. **Write or adapt the manifest**
+   - Use `schemas/loop-manifest.schema.json` as the public contract.
+   - Keep secrets out of the manifest. Use references, not plaintext credentials.
+   - Split work recursively through `loop_nodes`; split executable work through
+     `atomic_tasks`.
+
+4. **Validate before generation**
    - Run:
      ```bash
      python3 skills/looper-creator/scripts/validate_loop_project.py path/to/loop.json
      ```
-   - Fix any contract failures before scaffolding files.
+   - Fix root causes. Do not add compatibility branches to make invalid loop
+     designs pass.
 
-3. **Generate the project skeleton**
+5. **Generate the project skeleton**
    - Run:
      ```bash
      python3 skills/looper-creator/scripts/create_loop_project.py \
@@ -57,45 +60,45 @@ blocked, not partially complete.
        --output path/to/output-loop-project
      ```
 
-4. **Validate the generated project**
+6. **Validate generated output**
    - Run:
      ```bash
      python3 skills/looper-creator/scripts/validate_loop_project.py path/to/output-loop-project
      ```
    - A valid project contains `LOOP.md`, `PROGRESS.md`, `loop.json`,
+     `loops.json`, `tasks.json`, `agents.json`, `context-policy.json`,
      `state.json`, `journal.jsonl`, and `scripts/verify.sh`.
 
-5. **Report honestly**
-   - State the generated path, validation command, and result.
-   - Report blocked fields, missing external systems, or unverifiable conditions.
-   - Do not claim the loop is production-ready until the user's real verifier
-     succeeds against the real target system.
+## Design Rules
 
-## Manifest Guidance
-
-Use precise, checkable language:
-
-- Good success: `python3 scripts/verify.sh exits 0 after checking CI status and
-  smoke-test output for run_id`.
-- Bad success: `the code looks better`.
-- Good no-progress fingerprint: `["git_head", "failing_test_names", "open_task_ids"]`.
-- Bad no-progress fingerprint: `["overall progress"]`.
-
-Use a goal loop only when the goal has a deterministic endpoint. Use heartbeat or
-cron when cost needs to be bounded by cadence. Use hook only with rate limiting
-and backpressure.
+- Represent task decomposition as a recursive graph of loop nodes. A node may be
+  a workflow, agent loop, reflection loop, evaluator-optimizer loop, parallel
+  section, handoff loop, or human review gate.
+- Use multi-agent execution only when the manifest's activation policy justifies
+  it: independent tasks, context too large for one agent, independent review
+  needed, or domain specialization required.
+- Keep shared context small. Put durable truth in files and load detailed
+  artifacts just in time.
+- Treat tool output as expensive. Preserve commands, exit codes, failing
+  assertions, changed paths, and evidence refs; trim noisy raw logs.
+- Use deterministic verifiers for per-task, per-loop, and terminal checks. The
+  agent's own completion statement is not evidence.
+- Stop on no progress by comparing manifest-defined fingerprints, not by asking
+  the agent whether it feels stuck.
+- Gate irreversible or outward-facing operations such as push, merge, deployment,
+  deletion, email, billing, or production data changes.
 
 ## Resource Map
 
-- `scripts/create_loop_project.py`: Generate the standard loop project skeleton
-  from a validated manifest.
+- `scripts/create_loop_project.py`: Generate a standard recursive loop project
+  from a validated v2 manifest.
 - `scripts/validate_loop_project.py`: Validate a manifest or generated project
-  without external dependencies.
-- `schemas/loop-manifest.schema.json`: Machine-readable manifest contract.
-- `examples/minimal-valid.loop.json`: Small valid manifest to copy.
-- `examples/invalid-vague-goal.loop.json`: Rejected pattern showing what not to
-  accept.
-- `assets/templates/`: Human-readable template files mirrored by the generator.
+  using dependency-free semantic checks.
+- `schemas/loop-manifest.schema.json`: Machine-readable v2 contract.
+- `examples/*.loop.json`: Valid domain templates plus one invalid rejection
+  example.
+- `references/template-catalog.md`: Template selection guidance.
+- `assets/templates/`: Static project skeleton templates.
 
 ## Acceptance Criteria
 
@@ -104,5 +107,6 @@ Before finishing a Looper Creator task, verify:
 - The manifest validates.
 - The generated project validates.
 - Required files exist at the generated path.
-- The verifier command is present and executable.
-- The final response includes any remaining real-world verification gaps.
+- The verifier script is executable.
+- Any real-world verifier that depends on external systems is either run and
+  reported, or explicitly listed as unavailable.

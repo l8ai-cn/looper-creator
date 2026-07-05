@@ -12,6 +12,216 @@ from create_loop_project import create_project  # noqa: E402
 from validate_loop_project import load_manifest, validate_manifest, validate_project  # noqa: E402
 
 
+def recursive_manifest():
+    return {
+        "kind": "RecursiveLoopOrchestration",
+        "schema_version": "2.0",
+        "metadata": {
+            "id": "feature-development-loop",
+            "name": "Feature Development Loop",
+            "description": "Plan, implement, verify, and review one feature with recursive task decomposition.",
+            "locale": "en",
+        },
+        "objective": {
+            "user_goal": "Implement one scoped product feature without weakening tests or deployment checks.",
+            "business_value": "Reduce repeated agent context loading while preserving deterministic completion evidence.",
+            "done_definition": "All atomic tasks are accepted and terminal verification commands exit 0.",
+            "non_goals": ["Do not deploy automatically", "Do not rewrite unrelated modules"],
+        },
+        "clarification_policy": {
+            "ambiguity_triggers": [
+                "acceptance criteria missing",
+                "target environment unclear",
+                "permission boundary unclear",
+            ],
+            "default_action": "ask_user",
+            "secondary_user_query": {
+                "prompt": "Which target feature, acceptance criteria, and verification command should this loop use?",
+                "required_when": ["acceptance criteria missing", "verification command missing"],
+                "max_questions": 3,
+            },
+            "assumption_policy": {
+                "allowed": "Only low-risk implementation details may be assumed.",
+                "record_path": "PROGRESS.md",
+            },
+            "block_if": ["security impact unclear", "production data impact unclear"],
+        },
+        "decomposition_policy": {
+            "strategy": "recursive_task_graph",
+            "split_until": [
+                "each task has one owner agent",
+                "each task has machine-checkable acceptance criteria",
+                "each task can fit inside its context token budget",
+            ],
+            "minimum_task_granularity": "one independently verifiable code, test, docs, or review change",
+            "max_depth": 4,
+            "dependency_policy": "parents cannot complete until all children and verification refs pass",
+        },
+        "loop_nodes": [
+            {
+                "id": "root",
+                "type": "agent_loop",
+                "purpose": "Coordinate recursive decomposition and terminal verification.",
+                "entry_conditions": ["clarification_policy satisfied", "state.status is planned or running"],
+                "exit_conditions": ["terminal_verification_passed", "budget_exit_reached", "human_gate_required"],
+                "steps": ["load_context", "decompose", "dispatch_children", "verify", "record"],
+                "context_pack": ["loop.json", "PROGRESS.md", "state.json"],
+                "agent_assignments": ["orchestrator"],
+                "verification_refs": ["terminal"],
+                "children": [
+                    {
+                        "id": "implementation-cycle",
+                        "type": "evaluator_optimizer_loop",
+                        "purpose": "Iterate implementation tasks until per-task verification passes.",
+                        "entry_conditions": ["atomic_tasks ready"],
+                        "exit_conditions": ["all child tasks accepted", "no_progress_exit"],
+                        "steps": ["assign_task", "implement", "self_check", "deterministic_check", "review"],
+                        "context_pack": ["task card", "relevant source files", "verifier output"],
+                        "agent_assignments": ["worker", "reviewer"],
+                        "verification_refs": ["unit-tests"],
+                    }
+                ],
+            }
+        ],
+        "atomic_tasks": [
+            {
+                "id": "task-implement",
+                "goal": "Implement the scoped feature change.",
+                "input_refs": ["requirements.md", "src/"],
+                "output_artifacts": ["source diff", "test diff"],
+                "dependencies": [],
+                "assigned_agent": "worker",
+                "tools": ["shell", "apply_patch"],
+                "acceptance_criteria": ["unit-tests verifier exits 0", "reviewer accepts diff"],
+                "verification_refs": ["unit-tests"],
+                "max_attempts": 3,
+                "estimated_token_budget": 20000,
+            }
+        ],
+        "agents": [
+            {
+                "id": "orchestrator",
+                "role": "orchestrator",
+                "model_class": "strong_reasoning",
+                "responsibilities": ["maintain plan", "dispatch tasks", "decide exits"],
+                "context_scope": "shared",
+                "may_modify": ["PROGRESS.md", "state.json", "tasks.json"],
+            },
+            {
+                "id": "worker",
+                "role": "worker",
+                "model_class": "fast_worker",
+                "responsibilities": ["execute one atomic task"],
+                "context_scope": "task_private",
+                "may_modify": ["source files", "tests"],
+            },
+            {
+                "id": "reviewer",
+                "role": "reviewer",
+                "model_class": "strong_reasoning",
+                "responsibilities": ["review task output against acceptance criteria"],
+                "context_scope": "review_private",
+                "may_modify": ["review report"],
+            },
+        ],
+        "collaboration_policy": {
+            "patterns": ["orchestrator_workers", "evaluator_optimizer"],
+            "subagent_activation": {
+                "allowed_when": [
+                    "tasks are independent",
+                    "context would exceed single-agent budget",
+                    "independent review is required",
+                ],
+                "disallowed_when": ["shared mutable file would be edited by multiple workers"],
+                "token_budget_policy": "subagents must return distilled summaries under 2000 tokens",
+            },
+            "handoff_contract": {
+                "required_fields": ["task_id", "context_pack", "expected_output", "verification_refs"],
+                "return_fields": ["status", "artifacts", "evidence", "open_questions"],
+            },
+        },
+        "context_policy": {
+            "max_context_tokens": 60000,
+            "required_context_pack": ["loop.json", "state.json", "PROGRESS.md"],
+            "retrieval_strategy": "just_in_time",
+            "tool_output_trimming": "include only commands, exit codes, failing assertions, and changed paths",
+            "compaction": {
+                "trigger_ratio": 0.8,
+                "summary_contract": "preserve decisions, open tasks, verification evidence, and risks",
+            },
+            "durable_memory": {
+                "state_path": "state.json",
+                "journal_path": "journal.jsonl",
+                "progress_path": "PROGRESS.md",
+            },
+            "excluded_context": ["secrets", "raw tokens", "unrelated logs"],
+        },
+        "termination_policy": {
+            "success": ["terminal verification commands exit 0", "all atomic tasks accepted"],
+            "failure": ["required dependency unavailable", "protected verifier must change"],
+            "budget_exits": {"max_iterations": 8, "wall_clock_minutes": 90, "max_tokens": 180000},
+            "no_progress": {
+                "fingerprint_fields": ["git_head", "open_task_ids", "verifier_failures"],
+                "max_stale_iterations": 2,
+            },
+            "human_gate": ["before git push", "before production deploy"],
+        },
+        "verification_policy": {
+            "verifiers": [
+                {
+                    "id": "unit-tests",
+                    "command": "python3 -m unittest discover -s tests",
+                    "expected_result": "exit code 0",
+                    "scope": "per_task",
+                },
+                {
+                    "id": "terminal",
+                    "command": "bash scripts/verify.sh",
+                    "expected_result": "exit code 0",
+                    "scope": "terminal",
+                },
+            ],
+            "protected_paths": ["scripts/verify.sh", ".github/workflows", "tests"],
+            "anti_gaming_rules": [
+                "do not delete tests",
+                "do not weaken verifier commands",
+                "do not add continue-on-error",
+            ],
+        },
+        "cost_policy": {
+            "optimization_goal": "minimize repeated context loading while preserving verification evidence",
+            "token_budget_by_agent": {"orchestrator": 80000, "worker": 40000, "reviewer": 30000},
+            "stop_when_marginal_value_low": True,
+        },
+        "risk_policy": {
+            "risk_levels": ["low", "medium", "high", "critical"],
+            "high_risk_requires_human": ["security", "production data", "billing", "deployment"],
+            "forbidden_behaviors": ["silent fallback", "weakening validation", "storing plaintext secrets"],
+        },
+        "failure_modes": [
+            {"id": "vague-objective", "mitigation": "trigger clarification_policy.secondary_user_query"},
+            {"id": "context-bloat", "mitigation": "trim tool outputs and compact at threshold"},
+            {"id": "no-progress", "mitigation": "compare fingerprints and stop at threshold"},
+        ],
+        "templates": ["feature-development", "testing-debugging", "documentation-writing"],
+        "state": {"path": "state.json", "journal_path": "journal.jsonl", "progress_path": "PROGRESS.md"},
+        "observability": {
+            "trace_fields": ["loop_node_id", "task_id", "agent_id", "verifier_id", "token_estimate"],
+            "evidence_dir": "evidence",
+        },
+        "human_gates": {
+            "irreversible_actions": ["git push", "merge pull request", "deploy to production"],
+            "approval_record_path": "PROGRESS.md",
+        },
+        "escalation": {
+            "condition": "budget, no-progress, ambiguity, or human-gate exit is reached",
+            "owner": "human maintainer",
+            "channel": "Codex thread",
+            "message_template": "Loop {metadata.name} stopped: {reason}. Evidence: {evidence_ref}.",
+        },
+    }
+
+
 class LooperCreatorValidationTests(unittest.TestCase):
     def setUp(self):
         self.tmpdir = Path(tempfile.mkdtemp(prefix="looper-creator-test-"))
@@ -19,24 +229,47 @@ class LooperCreatorValidationTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdir)
 
-    def test_valid_manifest_and_generated_project(self):
-        manifest = load_manifest(SKILL_DIR / "examples" / "minimal-valid.loop.json")
+    def test_v2_recursive_manifest_and_generated_project(self):
+        manifest = recursive_manifest()
         self.assertEqual([], validate_manifest(manifest))
         output = self.tmpdir / "generated"
         create_project(manifest, output)
         self.assertEqual([], validate_project(output))
-        self.assertTrue((output / "scripts" / "verify.sh").exists())
+        for relative in [
+            "LOOP.md",
+            "PROGRESS.md",
+            "loop.json",
+            "loops.json",
+            "tasks.json",
+            "agents.json",
+            "context-policy.json",
+            "scripts/verify.sh",
+        ]:
+            self.assertTrue((output / relative).exists(), relative)
+        verifier_script = (output / "scripts" / "verify.sh").read_text(encoding="utf-8")
+        self.assertNotIn("python3 -m unittest discover -s tests", verifier_script)
+
+    def test_v2_requires_clarification_policy_for_ambiguous_requests(self):
+        manifest = recursive_manifest()
+        del manifest["clarification_policy"]
+        errors = validate_manifest(manifest)
+        self.assertTrue(any("clarification_policy" in error for error in errors))
+
+    def test_v2_rejects_subagent_activation_without_token_budget_policy(self):
+        manifest = recursive_manifest()
+        manifest["collaboration_policy"]["subagent_activation"]["token_budget_policy"] = ""
+        errors = validate_manifest(manifest)
+        self.assertTrue(any("token_budget_policy" in error for error in errors))
 
     def test_invalid_manifest_is_rejected(self):
         manifest = load_manifest(SKILL_DIR / "examples" / "invalid-vague-goal.loop.json")
         errors = validate_manifest(manifest)
         self.assertTrue(errors)
-        self.assertTrue(any("success_condition requires" in error for error in errors))
-        self.assertTrue(any("verifier.command must not contain" in error for error in errors))
+        self.assertTrue(any("clarification_policy" in error for error in errors))
 
     def test_plaintext_secret_key_is_rejected(self):
-        manifest = load_manifest(SKILL_DIR / "examples" / "minimal-valid.loop.json")
-        manifest["verifier"]["token"] = "not-allowed"
+        manifest = recursive_manifest()
+        manifest["verification_policy"]["token"] = "not-allowed"
         errors = validate_manifest(manifest)
         self.assertTrue(any("plaintext secret" in error for error in errors))
 

@@ -51,8 +51,8 @@
       "assigned_agent": "worker",
       "dependencies": [],
       "estimated_token_budget": 20000,
-      "goal": "Execute the next independently verifiable task slice.",
-      "id": "generic-task-task-1",
+      "goal": "Create or run the failing reproduction, fix the root cause, and verify the regression check.",
+      "id": "testing-debugging-task-1",
       "input_refs": [
         "requirements.md",
         "src/"
@@ -173,7 +173,7 @@
   "escalation": {
     "channel": "Codex thread",
     "condition": "budget, no-progress, ambiguity, or human-gate exit is reached",
-    "message_template": "Loop Generic Task Loop stopped: {reason}. Evidence: {evidence_ref}.",
+    "message_template": "Loop Testing Debugging Loop stopped: {reason}. Evidence: {evidence_ref}.",
     "owner": "human maintainer"
   },
   "failure_modes": [
@@ -267,19 +267,19 @@
     }
   ],
   "metadata": {
-    "description": "Clarify, decompose, execute, verify, and record a general high-value task.",
-    "id": "generic-task",
+    "description": "Reproduce, isolate, fix, and verify one failing behavior without masking the root cause.",
+    "id": "testing-debugging",
     "locale": "en",
-    "name": "Generic Task Loop"
+    "name": "Testing Debugging Loop"
   },
   "objective": {
     "business_value": "Reduce repeated agent context loading while preserving deterministic completion evidence.",
-    "done_definition": "All atomic tasks are accepted and terminal verification evidence is recorded.",
+    "done_definition": "The original failure reproduces before the fix and passes after the fix, with regression evidence recorded.",
     "non_goals": [
       "Do not deploy automatically",
       "Do not rewrite unrelated modules"
     ],
-    "user_goal": "Complete one user task with explicit clarification, context budget, verification, and escalation rules."
+    "user_goal": "Turn a confirmed failing test or runtime symptom into a verified fix."
   },
   "observability": {
     "evidence_dir": "evidence",
@@ -317,7 +317,7 @@
     "progress_path": "PROGRESS.md"
   },
   "templates": [
-    "generic-task"
+    "testing-debugging"
   ],
   "termination_policy": {
     "budget_exits": {
@@ -359,7 +359,7 @@
     ],
     "verifiers": [
       {
-        "command": "test -f loop.json && test -f state.json && test -f tasks.json",
+        "command": "python3 -m unittest discover -s tests",
         "expected_result": "exit code 0",
         "id": "unit-tests",
         "scope": "per_task"

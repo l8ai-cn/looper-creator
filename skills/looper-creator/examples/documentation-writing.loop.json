@@ -51,8 +51,8 @@
       "assigned_agent": "worker",
       "dependencies": [],
       "estimated_token_budget": 20000,
-      "goal": "Execute the next independently verifiable task slice.",
-      "id": "generic-task-task-1",
+      "goal": "Draft one source-grounded document section with explicit evidence references.",
+      "id": "documentation-writing-task-1",
       "input_refs": [
         "requirements.md",
         "src/"
@@ -173,7 +173,7 @@
   "escalation": {
     "channel": "Codex thread",
     "condition": "budget, no-progress, ambiguity, or human-gate exit is reached",
-    "message_template": "Loop Generic Task Loop stopped: {reason}. Evidence: {evidence_ref}.",
+    "message_template": "Loop Documentation Writing Loop stopped: {reason}. Evidence: {evidence_ref}.",
     "owner": "human maintainer"
   },
   "failure_modes": [
@@ -267,19 +267,19 @@
     }
   ],
   "metadata": {
-    "description": "Clarify, decompose, execute, verify, and record a general high-value task.",
-    "id": "generic-task",
+    "description": "Research, outline, draft, review, and verify a technical document using atomic page tasks.",
+    "id": "documentation-writing",
     "locale": "en",
-    "name": "Generic Task Loop"
+    "name": "Documentation Writing Loop"
   },
   "objective": {
     "business_value": "Reduce repeated agent context loading while preserving deterministic completion evidence.",
-    "done_definition": "All atomic tasks are accepted and terminal verification evidence is recorded.",
+    "done_definition": "Every page task has evidence refs, review acceptance, and final link/format checks.",
     "non_goals": [
       "Do not deploy automatically",
       "Do not rewrite unrelated modules"
     ],
-    "user_goal": "Complete one user task with explicit clarification, context budget, verification, and escalation rules."
+    "user_goal": "Produce a source-grounded technical document without generic filler or unsupported claims."
   },
   "observability": {
     "evidence_dir": "evidence",
@@ -317,7 +317,7 @@
     "progress_path": "PROGRESS.md"
   },
   "templates": [
-    "generic-task"
+    "documentation-writing"
   ],
   "termination_policy": {
     "budget_exits": {
@@ -359,7 +359,7 @@
     ],
     "verifiers": [
       {
-        "command": "test -f loop.json && test -f state.json && test -f tasks.json",
+        "command": "test -f LOOP.md && test -f PROGRESS.md",
         "expected_result": "exit code 0",
         "id": "unit-tests",
         "scope": "per_task"

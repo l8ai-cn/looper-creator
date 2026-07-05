@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a Looper Creator manifest or generated project."""
+"""Validate a Looper Creator recursive loop manifest or generated project."""
 
 from __future__ import annotations
 
@@ -11,7 +11,19 @@ from pathlib import Path
 from typing import Any
 
 
-TRIGGER_TYPES = {"heartbeat", "cron", "hook", "goal"}
+KIND = "RecursiveLoopOrchestration"
+SCHEMA_VERSION = "2.0"
+LOOP_NODE_TYPES = {
+    "workflow",
+    "agent_loop",
+    "reflection_loop",
+    "evaluator_optimizer_loop",
+    "parallel_section",
+    "handoff_loop",
+    "human_review_gate",
+}
+CLARIFICATION_ACTIONS = {"ask_user", "make_low_risk_assumption", "generate_options", "block_until_answer"}
+UNSAFE_COMMAND_FRAGMENTS = ("|| true", "continue-on-error", "set +e")
 FORBIDDEN_SECRET_KEYS = {
     "password",
     "passwd",
@@ -23,25 +35,32 @@ FORBIDDEN_SECRET_KEYS = {
     "secret",
 }
 REQUIRED_TOP_LEVEL = {
+    "kind",
     "schema_version",
-    "name",
-    "purpose",
-    "trigger",
-    "observation",
-    "action",
-    "success_condition",
-    "failure_condition",
-    "verifier",
-    "budgets",
-    "no_progress",
+    "metadata",
+    "objective",
+    "clarification_policy",
+    "decomposition_policy",
+    "loop_nodes",
+    "atomic_tasks",
+    "agents",
+    "collaboration_policy",
+    "context_policy",
+    "termination_policy",
+    "verification_policy",
+    "cost_policy",
+    "risk_policy",
+    "failure_modes",
+    "templates",
     "state",
-    "escalation",
+    "observability",
     "human_gates",
+    "escalation",
 }
 
 
 class ValidationError(Exception):
-    """Raised when a manifest or project fails validation."""
+    """Raised when a manifest or project cannot be loaded."""
 
 
 def _require(condition: bool, message: str, errors: list[str]) -> None:
@@ -56,12 +75,33 @@ def _as_dict(value: Any, name: str, errors: list[str]) -> dict[str, Any]:
     return value
 
 
+def _as_list(value: Any, name: str, errors: list[str], min_items: int = 1) -> list[Any]:
+    if not isinstance(value, list):
+        errors.append(f"{name} must be a list")
+        return []
+    if len(value) < min_items:
+        errors.append(f"{name} must contain at least {min_items} item(s)")
+    return value
+
+
 def _non_empty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
 def _positive_int(value: Any) -> bool:
     return isinstance(value, int) and value > 0 and not isinstance(value, bool)
+
+
+def _positive_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and value > 0 and not isinstance(value, bool)
+
+
+def _string_list(value: Any, name: str, errors: list[str], min_items: int = 1) -> list[str]:
+    items = _as_list(value, name, errors, min_items=min_items)
+    if not all(_non_empty_string(item) for item in items):
+        errors.append(f"{name} must contain only non-empty strings")
+        return []
+    return items
 
 
 def _walk_forbidden_keys(value: Any, path: str, errors: list[str]) -> None:
@@ -76,83 +116,280 @@ def _walk_forbidden_keys(value: Any, path: str, errors: list[str]) -> None:
             _walk_forbidden_keys(child, f"{path}[{index}]", errors)
 
 
+def _validate_command(command: Any, path: str, errors: list[str]) -> None:
+    _require(_non_empty_string(command), f"{path} must be a non-empty string", errors)
+    if isinstance(command, str):
+        for fragment in UNSAFE_COMMAND_FRAGMENTS:
+            _require(fragment not in command, f"{path} must not contain '{fragment}'", errors)
+
+
+def _validate_metadata(manifest: dict[str, Any], errors: list[str]) -> None:
+    metadata = _as_dict(manifest.get("metadata"), "metadata", errors)
+    for key in ("id", "name", "description", "locale"):
+        _require(_non_empty_string(metadata.get(key)), f"metadata.{key} must be non-empty", errors)
+
+
+def _validate_objective(manifest: dict[str, Any], errors: list[str]) -> None:
+    objective = _as_dict(manifest.get("objective"), "objective", errors)
+    for key in ("user_goal", "done_definition"):
+        _require(_non_empty_string(objective.get(key)), f"objective.{key} must be non-empty", errors)
+    _string_list(objective.get("non_goals"), "objective.non_goals", errors, min_items=0)
+
+
+def _validate_clarification_policy(manifest: dict[str, Any], errors: list[str]) -> None:
+    policy = _as_dict(manifest.get("clarification_policy"), "clarification_policy", errors)
+    _string_list(policy.get("ambiguity_triggers"), "clarification_policy.ambiguity_triggers", errors)
+    _require(
+        policy.get("default_action") in CLARIFICATION_ACTIONS,
+        "clarification_policy.default_action must be ask_user, make_low_risk_assumption, generate_options, or block_until_answer",
+        errors,
+    )
+    secondary = _as_dict(policy.get("secondary_user_query"), "clarification_policy.secondary_user_query", errors)
+    _require(_non_empty_string(secondary.get("prompt")), "clarification_policy.secondary_user_query.prompt must be non-empty", errors)
+    _string_list(secondary.get("required_when"), "clarification_policy.secondary_user_query.required_when", errors)
+    _require(_positive_int(secondary.get("max_questions")), "clarification_policy.secondary_user_query.max_questions must be a positive integer", errors)
+    assumption = _as_dict(policy.get("assumption_policy"), "clarification_policy.assumption_policy", errors)
+    _require(_non_empty_string(assumption.get("allowed")), "clarification_policy.assumption_policy.allowed must be non-empty", errors)
+    _require(_non_empty_string(assumption.get("record_path")), "clarification_policy.assumption_policy.record_path must be non-empty", errors)
+    _string_list(policy.get("block_if"), "clarification_policy.block_if", errors)
+
+
+def _validate_decomposition_policy(manifest: dict[str, Any], errors: list[str]) -> int:
+    policy = _as_dict(manifest.get("decomposition_policy"), "decomposition_policy", errors)
+    for key in ("strategy", "minimum_task_granularity", "dependency_policy"):
+        _require(_non_empty_string(policy.get(key)), f"decomposition_policy.{key} must be non-empty", errors)
+    _string_list(policy.get("split_until"), "decomposition_policy.split_until", errors)
+    _require(_positive_int(policy.get("max_depth")), "decomposition_policy.max_depth must be a positive integer", errors)
+    return policy.get("max_depth") if _positive_int(policy.get("max_depth")) else 1
+
+
+def _collect_loop_nodes(nodes: list[Any], errors: list[str], path: str, depth: int, max_depth: int) -> set[str]:
+    ids: set[str] = set()
+    for index, raw_node in enumerate(nodes):
+        node_path = f"{path}[{index}]"
+        node = _as_dict(raw_node, node_path, errors)
+        node_id = node.get("id")
+        _require(_non_empty_string(node_id), f"{node_path}.id must be non-empty", errors)
+        if _non_empty_string(node_id):
+            _require(node_id not in ids, f"{node_path}.id duplicates another loop node id", errors)
+            ids.add(node_id)
+        _require(node.get("type") in LOOP_NODE_TYPES, f"{node_path}.type must be a known loop node type", errors)
+        _require(_non_empty_string(node.get("purpose")), f"{node_path}.purpose must be non-empty", errors)
+        _string_list(node.get("entry_conditions"), f"{node_path}.entry_conditions", errors)
+        _string_list(node.get("exit_conditions"), f"{node_path}.exit_conditions", errors)
+        _string_list(node.get("steps"), f"{node_path}.steps", errors)
+        _string_list(node.get("context_pack"), f"{node_path}.context_pack", errors)
+        _string_list(node.get("agent_assignments"), f"{node_path}.agent_assignments", errors)
+        _string_list(node.get("verification_refs"), f"{node_path}.verification_refs", errors)
+        children = node.get("children", [])
+        if children:
+            _require(depth < max_depth, f"{node_path}.children exceeds decomposition_policy.max_depth", errors)
+            child_nodes = _as_list(children, f"{node_path}.children", errors)
+            ids.update(_collect_loop_nodes(child_nodes, errors, f"{node_path}.children", depth + 1, max_depth))
+    return ids
+
+
+def _validate_atomic_tasks(manifest: dict[str, Any], errors: list[str], agent_ids: set[str], verifier_ids: set[str]) -> set[str]:
+    task_ids: set[str] = set()
+    for index, raw_task in enumerate(_as_list(manifest.get("atomic_tasks"), "atomic_tasks", errors)):
+        path = f"atomic_tasks[{index}]"
+        task = _as_dict(raw_task, path, errors)
+        task_id = task.get("id")
+        _require(_non_empty_string(task_id), f"{path}.id must be non-empty", errors)
+        if _non_empty_string(task_id):
+            _require(task_id not in task_ids, f"{path}.id duplicates another atomic task id", errors)
+            task_ids.add(task_id)
+        for key in ("goal", "assigned_agent"):
+            _require(_non_empty_string(task.get(key)), f"{path}.{key} must be non-empty", errors)
+        _string_list(task.get("input_refs"), f"{path}.input_refs", errors)
+        _string_list(task.get("output_artifacts"), f"{path}.output_artifacts", errors)
+        _string_list(task.get("dependencies"), f"{path}.dependencies", errors, min_items=0)
+        _string_list(task.get("tools"), f"{path}.tools", errors, min_items=0)
+        _string_list(task.get("acceptance_criteria"), f"{path}.acceptance_criteria", errors)
+        refs = _string_list(task.get("verification_refs"), f"{path}.verification_refs", errors)
+        _require(_positive_int(task.get("max_attempts")), f"{path}.max_attempts must be a positive integer", errors)
+        _require(_positive_int(task.get("estimated_token_budget")), f"{path}.estimated_token_budget must be a positive integer", errors)
+        if _non_empty_string(task.get("assigned_agent")):
+            _require(task["assigned_agent"] in agent_ids, f"{path}.assigned_agent must reference an agent id", errors)
+        for ref in refs:
+            _require(ref in verifier_ids, f"{path}.verification_refs contains unknown verifier id: {ref}", errors)
+    return task_ids
+
+
+def _validate_agents(manifest: dict[str, Any], errors: list[str]) -> set[str]:
+    agent_ids: set[str] = set()
+    for index, raw_agent in enumerate(_as_list(manifest.get("agents"), "agents", errors)):
+        path = f"agents[{index}]"
+        agent = _as_dict(raw_agent, path, errors)
+        agent_id = agent.get("id")
+        _require(_non_empty_string(agent_id), f"{path}.id must be non-empty", errors)
+        if _non_empty_string(agent_id):
+            _require(agent_id not in agent_ids, f"{path}.id duplicates another agent id", errors)
+            agent_ids.add(agent_id)
+        for key in ("role", "model_class", "context_scope"):
+            _require(_non_empty_string(agent.get(key)), f"{path}.{key} must be non-empty", errors)
+        _string_list(agent.get("responsibilities"), f"{path}.responsibilities", errors)
+        _string_list(agent.get("may_modify"), f"{path}.may_modify", errors, min_items=0)
+    return agent_ids
+
+
+def _validate_collaboration_policy(manifest: dict[str, Any], errors: list[str]) -> None:
+    policy = _as_dict(manifest.get("collaboration_policy"), "collaboration_policy", errors)
+    _string_list(policy.get("patterns"), "collaboration_policy.patterns", errors)
+    activation = _as_dict(policy.get("subagent_activation"), "collaboration_policy.subagent_activation", errors)
+    _string_list(activation.get("allowed_when"), "collaboration_policy.subagent_activation.allowed_when", errors)
+    _string_list(activation.get("disallowed_when"), "collaboration_policy.subagent_activation.disallowed_when", errors)
+    _require(
+        _non_empty_string(activation.get("token_budget_policy")),
+        "collaboration_policy.subagent_activation.token_budget_policy must be non-empty",
+        errors,
+    )
+    handoff = _as_dict(policy.get("handoff_contract"), "collaboration_policy.handoff_contract", errors)
+    _string_list(handoff.get("required_fields"), "collaboration_policy.handoff_contract.required_fields", errors)
+    _string_list(handoff.get("return_fields"), "collaboration_policy.handoff_contract.return_fields", errors)
+
+
+def _validate_context_policy(manifest: dict[str, Any], errors: list[str]) -> None:
+    policy = _as_dict(manifest.get("context_policy"), "context_policy", errors)
+    _require(_positive_int(policy.get("max_context_tokens")), "context_policy.max_context_tokens must be a positive integer", errors)
+    _string_list(policy.get("required_context_pack"), "context_policy.required_context_pack", errors)
+    for key in ("retrieval_strategy", "tool_output_trimming"):
+        _require(_non_empty_string(policy.get(key)), f"context_policy.{key} must be non-empty", errors)
+    compaction = _as_dict(policy.get("compaction"), "context_policy.compaction", errors)
+    _require(
+        _positive_number(compaction.get("trigger_ratio")) and compaction.get("trigger_ratio") <= 1,
+        "context_policy.compaction.trigger_ratio must be a number between 0 and 1",
+        errors,
+    )
+    _require(_non_empty_string(compaction.get("summary_contract")), "context_policy.compaction.summary_contract must be non-empty", errors)
+    durable = _as_dict(policy.get("durable_memory"), "context_policy.durable_memory", errors)
+    for key in ("state_path", "journal_path", "progress_path"):
+        _require(_non_empty_string(durable.get(key)), f"context_policy.durable_memory.{key} must be non-empty", errors)
+    _string_list(policy.get("excluded_context"), "context_policy.excluded_context", errors)
+
+
+def _validate_termination_policy(manifest: dict[str, Any], errors: list[str]) -> None:
+    policy = _as_dict(manifest.get("termination_policy"), "termination_policy", errors)
+    _string_list(policy.get("success"), "termination_policy.success", errors)
+    _string_list(policy.get("failure"), "termination_policy.failure", errors)
+    _string_list(policy.get("human_gate"), "termination_policy.human_gate", errors)
+    budgets = _as_dict(policy.get("budget_exits"), "termination_policy.budget_exits", errors)
+    for key in ("max_iterations", "wall_clock_minutes", "max_tokens"):
+        _require(_positive_int(budgets.get(key)), f"termination_policy.budget_exits.{key} must be a positive integer", errors)
+    no_progress = _as_dict(policy.get("no_progress"), "termination_policy.no_progress", errors)
+    _string_list(no_progress.get("fingerprint_fields"), "termination_policy.no_progress.fingerprint_fields", errors, min_items=2)
+    _require(_positive_int(no_progress.get("max_stale_iterations")), "termination_policy.no_progress.max_stale_iterations must be a positive integer", errors)
+
+
+def _validate_verification_policy(manifest: dict[str, Any], errors: list[str]) -> set[str]:
+    policy = _as_dict(manifest.get("verification_policy"), "verification_policy", errors)
+    verifier_ids: set[str] = set()
+    for index, raw_verifier in enumerate(_as_list(policy.get("verifiers"), "verification_policy.verifiers", errors)):
+        path = f"verification_policy.verifiers[{index}]"
+        verifier = _as_dict(raw_verifier, path, errors)
+        verifier_id = verifier.get("id")
+        _require(_non_empty_string(verifier_id), f"{path}.id must be non-empty", errors)
+        if _non_empty_string(verifier_id):
+            _require(verifier_id not in verifier_ids, f"{path}.id duplicates another verifier id", errors)
+            verifier_ids.add(verifier_id)
+        _validate_command(verifier.get("command"), f"{path}.command", errors)
+        for key in ("expected_result", "scope"):
+            _require(_non_empty_string(verifier.get(key)), f"{path}.{key} must be non-empty", errors)
+    _string_list(policy.get("protected_paths"), "verification_policy.protected_paths", errors)
+    rules = _string_list(policy.get("anti_gaming_rules"), "verification_policy.anti_gaming_rules", errors)
+    _require(any("weaken" in rule.lower() for rule in rules), "verification_policy.anti_gaming_rules must forbid weakening validation", errors)
+    return verifier_ids
+
+
+def _validate_cost_policy(manifest: dict[str, Any], errors: list[str], agent_ids: set[str]) -> None:
+    policy = _as_dict(manifest.get("cost_policy"), "cost_policy", errors)
+    _require(_non_empty_string(policy.get("optimization_goal")), "cost_policy.optimization_goal must be non-empty", errors)
+    budgets = _as_dict(policy.get("token_budget_by_agent"), "cost_policy.token_budget_by_agent", errors)
+    for agent_id in agent_ids:
+        _require(_positive_int(budgets.get(agent_id)), f"cost_policy.token_budget_by_agent.{agent_id} must be a positive integer", errors)
+    _require(isinstance(policy.get("stop_when_marginal_value_low"), bool), "cost_policy.stop_when_marginal_value_low must be boolean", errors)
+
+
+def _validate_risk_policy(manifest: dict[str, Any], errors: list[str]) -> None:
+    policy = _as_dict(manifest.get("risk_policy"), "risk_policy", errors)
+    _string_list(policy.get("risk_levels"), "risk_policy.risk_levels", errors)
+    _string_list(policy.get("high_risk_requires_human"), "risk_policy.high_risk_requires_human", errors)
+    forbidden = _string_list(policy.get("forbidden_behaviors"), "risk_policy.forbidden_behaviors", errors)
+    _require(any("silent fallback" in item.lower() for item in forbidden), "risk_policy.forbidden_behaviors must forbid silent fallback", errors)
+
+
+def _validate_failure_modes(manifest: dict[str, Any], errors: list[str]) -> None:
+    for index, raw_mode in enumerate(_as_list(manifest.get("failure_modes"), "failure_modes", errors)):
+        path = f"failure_modes[{index}]"
+        mode = _as_dict(raw_mode, path, errors)
+        for key in ("id", "mitigation"):
+            _require(_non_empty_string(mode.get(key)), f"{path}.{key} must be non-empty", errors)
+
+
+def _validate_state_and_outputs(manifest: dict[str, Any], errors: list[str]) -> None:
+    state = _as_dict(manifest.get("state"), "state", errors)
+    for key in ("path", "journal_path", "progress_path"):
+        _require(_non_empty_string(state.get(key)), f"state.{key} must be non-empty", errors)
+    observability = _as_dict(manifest.get("observability"), "observability", errors)
+    _string_list(observability.get("trace_fields"), "observability.trace_fields", errors)
+    _require(_non_empty_string(observability.get("evidence_dir")), "observability.evidence_dir must be non-empty", errors)
+    gates = _as_dict(manifest.get("human_gates"), "human_gates", errors)
+    _string_list(gates.get("irreversible_actions"), "human_gates.irreversible_actions", errors, min_items=0)
+    _require(_non_empty_string(gates.get("approval_record_path")), "human_gates.approval_record_path must be non-empty", errors)
+    escalation = _as_dict(manifest.get("escalation"), "escalation", errors)
+    for key in ("condition", "owner", "channel", "message_template"):
+        _require(_non_empty_string(escalation.get(key)), f"escalation.{key} must be non-empty", errors)
+
+
 def validate_manifest(manifest: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     missing = sorted(REQUIRED_TOP_LEVEL - set(manifest))
     for key in missing:
         errors.append(f"missing required field: {key}")
 
-    _require(manifest.get("schema_version") == "1.0", "schema_version must be '1.0'", errors)
-    _require(_non_empty_string(manifest.get("name")), "name must be a non-empty string", errors)
-    _require(_non_empty_string(manifest.get("purpose")), "purpose must be a non-empty string", errors)
-
-    trigger = _as_dict(manifest.get("trigger"), "trigger", errors)
-    trigger_type = trigger.get("type")
-    _require(trigger_type in TRIGGER_TYPES, "trigger.type must be heartbeat, cron, hook, or goal", errors)
-    _require(_non_empty_string(trigger.get("description")), "trigger.description must be a non-empty string", errors)
-    if trigger_type in {"heartbeat", "cron"}:
-        _require(_non_empty_string(trigger.get("schedule")), "heartbeat/cron triggers require trigger.schedule", errors)
-    if trigger_type == "hook":
-        _require(_non_empty_string(trigger.get("event_source")), "hook triggers require trigger.event_source", errors)
-        _require(_non_empty_string(trigger.get("backpressure")), "hook triggers require trigger.backpressure", errors)
-
-    for section_name in ("observation", "action", "success_condition", "failure_condition"):
-        section = _as_dict(manifest.get(section_name), section_name, errors)
-        _require(_non_empty_string(section.get("description")), f"{section_name}.description must be non-empty", errors)
-
-    success = _as_dict(manifest.get("success_condition"), "success_condition", errors)
-    _require(
-        _non_empty_string(success.get("check_command")) or _non_empty_string(success.get("evidence")),
-        "success_condition requires check_command or evidence",
-        errors,
-    )
-
-    verifier = _as_dict(manifest.get("verifier"), "verifier", errors)
-    command = verifier.get("command")
-    _require(_non_empty_string(command), "verifier.command must be a non-empty string", errors)
-    if isinstance(command, str):
-        unsafe_fragments = ["|| true", "continue-on-error", "set +e"]
-        for fragment in unsafe_fragments:
-            _require(fragment not in command, f"verifier.command must not contain '{fragment}'", errors)
-    _require(_non_empty_string(verifier.get("expected_result")), "verifier.expected_result must be non-empty", errors)
-    protected_paths = verifier.get("protected_paths")
-    _require(isinstance(protected_paths, list) and bool(protected_paths), "verifier.protected_paths must be a non-empty list", errors)
-
-    budgets = _as_dict(manifest.get("budgets"), "budgets", errors)
-    for key in ("max_iterations", "wall_clock_minutes"):
-        _require(_positive_int(budgets.get(key)), f"budgets.{key} must be a positive integer", errors)
-    if "max_tokens" in budgets:
-        _require(_positive_int(budgets.get("max_tokens")), "budgets.max_tokens must be a positive integer", errors)
-    if "max_cost_usd" in budgets:
-        _require(isinstance(budgets.get("max_cost_usd"), (int, float)) and budgets.get("max_cost_usd") > 0, "budgets.max_cost_usd must be positive", errors)
-
-    no_progress = _as_dict(manifest.get("no_progress"), "no_progress", errors)
-    _require(_positive_int(no_progress.get("max_stale_iterations")), "no_progress.max_stale_iterations must be a positive integer", errors)
-    fingerprint_fields = no_progress.get("fingerprint_fields")
-    _require(
-        isinstance(fingerprint_fields, list) and all(_non_empty_string(item) for item in fingerprint_fields) and len(fingerprint_fields) >= 2,
-        "no_progress.fingerprint_fields must contain at least two non-empty strings",
-        errors,
-    )
-
-    state = _as_dict(manifest.get("state"), "state", errors)
-    _require(_non_empty_string(state.get("path")), "state.path must be non-empty", errors)
-    _require(_non_empty_string(state.get("journal_path")), "state.journal_path must be non-empty", errors)
-
-    escalation = _as_dict(manifest.get("escalation"), "escalation", errors)
-    for key in ("condition", "owner", "channel", "message_template"):
-        _require(_non_empty_string(escalation.get(key)), f"escalation.{key} must be non-empty", errors)
-
-    human_gates = _as_dict(manifest.get("human_gates"), "human_gates", errors)
-    irreversible_actions = human_gates.get("irreversible_actions")
-    _require(
-        isinstance(irreversible_actions, list) and all(_non_empty_string(item) for item in irreversible_actions),
-        "human_gates.irreversible_actions must be a list of strings",
-        errors,
-    )
-
+    _require(manifest.get("kind") == KIND, f"kind must be '{KIND}'", errors)
+    _require(manifest.get("schema_version") == SCHEMA_VERSION, f"schema_version must be '{SCHEMA_VERSION}'", errors)
     _walk_forbidden_keys(manifest, "$", errors)
+
+    _validate_metadata(manifest, errors)
+    _validate_objective(manifest, errors)
+    _validate_clarification_policy(manifest, errors)
+    max_depth = _validate_decomposition_policy(manifest, errors)
+    agent_ids = _validate_agents(manifest, errors)
+    verifier_ids = _validate_verification_policy(manifest, errors)
+
+    loop_nodes = _as_list(manifest.get("loop_nodes"), "loop_nodes", errors)
+    _collect_loop_nodes(loop_nodes, errors, "loop_nodes", depth=1, max_depth=max_depth)
+
+    for index, raw_node in enumerate(loop_nodes):
+        _validate_loop_node_references(raw_node, f"loop_nodes[{index}]", errors, agent_ids, verifier_ids)
+
+    _validate_atomic_tasks(manifest, errors, agent_ids, verifier_ids)
+    _validate_collaboration_policy(manifest, errors)
+    _validate_context_policy(manifest, errors)
+    _validate_termination_policy(manifest, errors)
+    _validate_cost_policy(manifest, errors, agent_ids)
+    _validate_risk_policy(manifest, errors)
+    _validate_failure_modes(manifest, errors)
+    _string_list(manifest.get("templates"), "templates", errors)
+    _validate_state_and_outputs(manifest, errors)
     return errors
+
+
+def _validate_loop_node_references(
+    raw_node: Any,
+    path: str,
+    errors: list[str],
+    agent_ids: set[str],
+    verifier_ids: set[str],
+) -> None:
+    node = _as_dict(raw_node, path, errors)
+    for agent_id in node.get("agent_assignments", []):
+        _require(agent_id in agent_ids, f"{path}.agent_assignments contains unknown agent id: {agent_id}", errors)
+    for verifier_id in node.get("verification_refs", []):
+        _require(verifier_id in verifier_ids, f"{path}.verification_refs contains unknown verifier id: {verifier_id}", errors)
+    for index, child in enumerate(node.get("children", [])):
+        _validate_loop_node_references(child, f"{path}.children[{index}]", errors, agent_ids, verifier_ids)
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
@@ -177,12 +414,18 @@ def validate_project(path: Path) -> list[str]:
         return [str(exc)]
 
     errors.extend(validate_manifest(manifest))
+    state = manifest.get("state", {}) if isinstance(manifest.get("state"), dict) else {}
     required_files = [
         "LOOP.md",
         "PROGRESS.md",
         "loop.json",
-        manifest.get("state", {}).get("path", "state.json"),
-        manifest.get("state", {}).get("journal_path", "journal.jsonl"),
+        "loops.json",
+        "tasks.json",
+        "agents.json",
+        "context-policy.json",
+        state.get("path", "state.json"),
+        state.get("journal_path", "journal.jsonl"),
+        state.get("progress_path", "PROGRESS.md"),
         "scripts/verify.sh",
     ]
     for relative in required_files:

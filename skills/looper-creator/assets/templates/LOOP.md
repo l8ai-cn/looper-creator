@@ -2,44 +2,49 @@
 
 ## Purpose
 
-Describe the real-world goal in one paragraph.
+State the user goal, business value, done definition, and explicit non-goals.
 
-## Trigger
+## Clarification Policy
 
-- Type: heartbeat | cron | hook | goal
-- Description:
-- Schedule:
-- Event source:
-- Backpressure:
+- Ambiguity triggers:
+- Secondary user query:
+- Low-risk assumptions allowed:
+- Block if:
 
-## Cycle Contract
+## Recursive Loop Topology
 
-1. Observe:
-2. Act:
-3. Verify:
-4. Record:
+List loop nodes as a recursive task graph. Each node needs:
 
-## Success
+- id
+- type
+- purpose
+- entry conditions
+- exit conditions
+- steps
+- context pack
+- agent assignments
+- verification refs
+- children when the task must be decomposed further
 
-Machine-checkable success condition and command.
+## Atomic Tasks
 
-## Failure
+Each task must be independently verifiable and fit inside its context budget.
 
-Explicit unrecoverable or retry-exhausted condition.
+## Agents
 
-## Guardrails
+Define orchestrator, worker, reviewer, verifier, and domain specialist roles only
+when they are needed by the loop.
 
-- Max iterations:
-- Wall-clock minutes:
-- Max tokens:
-- Max cost USD:
-- No-progress threshold:
-- Fingerprint fields:
+## Context Strategy
 
-## Human Gates
+Define required context, retrieval strategy, trimming policy, compaction threshold,
+durable memory paths, and excluded context.
 
-Stop for approval before irreversible or outward-facing actions.
+## Termination Policy
 
-## Escalation
+Define success, failure, budget exits, no-progress exits, and human gates.
 
-Owner, channel, condition, and message template.
+## Verification
+
+List deterministic verifiers and protected paths. Do not accept agent self-report
+as terminal evidence.

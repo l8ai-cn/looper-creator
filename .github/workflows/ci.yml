@@ -12,17 +12,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
+      - name: Validate schema JSON
+        run: python3 -m json.tool skills/looper-creator/schemas/loop-manifest.schema.json >/dev/null
       - name: Validate manifests
         run: |
-          python3 skills/looper-creator/scripts/validate_loop_project.py skills/looper-creator/examples/minimal-valid.loop.json
-          if python3 skills/looper-creator/scripts/validate_loop_project.py skills/looper-creator/examples/invalid-vague-goal.loop.json; then
-            echo "invalid example unexpectedly passed"
-            exit 1
-          fi
+          for f in skills/looper-creator/examples/*.loop.json; do
+            case "$f" in
+              *invalid*)
+                if python3 skills/looper-creator/scripts/validate_loop_project.py "$f"; then
+                  echo "invalid example unexpectedly passed: $f"
+                  exit 1
+                fi
+                ;;
+              *)
+                python3 skills/looper-creator/scripts/validate_loop_project.py "$f"
+                ;;
+            esac
+          done
       - name: Generate sample project
         run: |
           python3 skills/looper-creator/scripts/create_loop_project.py \
-            --manifest skills/looper-creator/examples/minimal-valid.loop.json \
+            --manifest skills/looper-creator/examples/feature-development.loop.json \
             --output /tmp/example-loop
           python3 skills/looper-creator/scripts/validate_loop_project.py /tmp/example-loop
       - name: Run tests

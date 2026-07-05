@@ -1,0 +1,26 @@
+[
+  {
+    "id": "orchestrator",
+    "role": "orchestrator",
+    "model_class": "strong_reasoning",
+    "responsibilities": ["maintain loop state", "dispatch atomic tasks", "decide exits"],
+    "context_scope": "shared",
+    "may_modify": ["PROGRESS.md", "state.json", "tasks.json"]
+  },
+  {
+    "id": "worker",
+    "role": "worker",
+    "model_class": "fast_worker",
+    "responsibilities": ["execute one atomic task"],
+    "context_scope": "task_private",
+    "may_modify": ["task output files"]
+  },
+  {
+    "id": "reviewer",
+    "role": "reviewer",
+    "model_class": "strong_reasoning",
+    "responsibilities": ["review output against acceptance criteria"],
+    "context_scope": "review_private",
+    "may_modify": ["review report"]
+  }
+]

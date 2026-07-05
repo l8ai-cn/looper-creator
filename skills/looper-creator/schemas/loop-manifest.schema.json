@@ -1,135 +1,339 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/looper-creator/loop-manifest.schema.json",
-  "title": "Looper Creator Manifest",
+  "title": "Looper Creator Recursive Loop Orchestration Manifest",
   "type": "object",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "required": [
+    "kind",
     "schema_version",
-    "name",
-    "purpose",
-    "trigger",
-    "observation",
-    "action",
-    "success_condition",
-    "failure_condition",
-    "verifier",
-    "budgets",
-    "no_progress",
+    "metadata",
+    "objective",
+    "clarification_policy",
+    "decomposition_policy",
+    "loop_nodes",
+    "atomic_tasks",
+    "agents",
+    "collaboration_policy",
+    "context_policy",
+    "termination_policy",
+    "verification_policy",
+    "cost_policy",
+    "risk_policy",
+    "failure_modes",
+    "templates",
     "state",
-    "escalation",
-    "human_gates"
+    "observability",
+    "human_gates",
+    "escalation"
   ],
   "properties": {
-    "schema_version": { "const": "1.0" },
-    "name": { "type": "string", "minLength": 1 },
-    "purpose": { "type": "string", "minLength": 1 },
-    "trigger": {
+    "kind": { "const": "RecursiveLoopOrchestration" },
+    "schema_version": { "const": "2.0" },
+    "metadata": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["type", "description"],
+      "required": ["id", "name", "description", "locale"],
       "properties": {
-        "type": { "enum": ["heartbeat", "cron", "hook", "goal"] },
-        "description": { "type": "string", "minLength": 1 },
-        "schedule": { "type": "string", "minLength": 1 },
-        "event_source": { "type": "string", "minLength": 1 },
-        "backpressure": { "type": "string", "minLength": 1 }
+        "id": { "$ref": "#/$defs/non_empty_string" },
+        "name": { "$ref": "#/$defs/non_empty_string" },
+        "description": { "$ref": "#/$defs/non_empty_string" },
+        "locale": { "$ref": "#/$defs/non_empty_string" }
       }
     },
-    "observation": { "$ref": "#/$defs/described" },
-    "action": { "$ref": "#/$defs/described" },
-    "success_condition": {
+    "objective": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["description"],
+      "required": ["user_goal", "done_definition", "non_goals"],
       "properties": {
-        "description": { "type": "string", "minLength": 1 },
-        "check_command": { "type": "string", "minLength": 1 },
-        "evidence": { "type": "string", "minLength": 1 }
-      },
-      "anyOf": [
-        { "required": ["check_command"] },
-        { "required": ["evidence"] }
-      ]
+        "user_goal": { "$ref": "#/$defs/non_empty_string" },
+        "business_value": { "$ref": "#/$defs/non_empty_string" },
+        "done_definition": { "$ref": "#/$defs/non_empty_string" },
+        "non_goals": { "$ref": "#/$defs/string_array" }
+      }
     },
-    "failure_condition": { "$ref": "#/$defs/described" },
-    "verifier": {
+    "clarification_policy": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["command", "expected_result", "protected_paths"],
+      "required": ["ambiguity_triggers", "default_action", "secondary_user_query", "assumption_policy", "block_if"],
       "properties": {
-        "command": { "type": "string", "minLength": 1 },
-        "expected_result": { "type": "string", "minLength": 1 },
-        "protected_paths": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "minLength": 1 }
+        "ambiguity_triggers": { "$ref": "#/$defs/string_array" },
+        "default_action": {
+          "enum": ["ask_user", "make_low_risk_assumption", "generate_options", "block_until_answer"]
+        },
+        "secondary_user_query": {
+          "type": "object",
+          "required": ["prompt", "required_when", "max_questions"],
+          "properties": {
+            "prompt": { "$ref": "#/$defs/non_empty_string" },
+            "required_when": { "$ref": "#/$defs/string_array" },
+            "max_questions": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "assumption_policy": {
+          "type": "object",
+          "required": ["allowed", "record_path"],
+          "properties": {
+            "allowed": { "$ref": "#/$defs/non_empty_string" },
+            "record_path": { "$ref": "#/$defs/non_empty_string" }
+          }
+        },
+        "block_if": { "$ref": "#/$defs/string_array" }
+      }
+    },
+    "decomposition_policy": {
+      "type": "object",
+      "required": ["strategy", "split_until", "minimum_task_granularity", "max_depth", "dependency_policy"],
+      "properties": {
+        "strategy": { "$ref": "#/$defs/non_empty_string" },
+        "split_until": { "$ref": "#/$defs/string_array" },
+        "minimum_task_granularity": { "$ref": "#/$defs/non_empty_string" },
+        "max_depth": { "type": "integer", "minimum": 1 },
+        "dependency_policy": { "$ref": "#/$defs/non_empty_string" }
+      }
+    },
+    "loop_nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/loop_node" }
+    },
+    "atomic_tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/atomic_task" }
+    },
+    "agents": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/agent" }
+    },
+    "collaboration_policy": { "$ref": "#/$defs/collaboration_policy" },
+    "context_policy": { "$ref": "#/$defs/context_policy" },
+    "termination_policy": { "$ref": "#/$defs/termination_policy" },
+    "verification_policy": { "$ref": "#/$defs/verification_policy" },
+    "cost_policy": { "$ref": "#/$defs/cost_policy" },
+    "risk_policy": { "$ref": "#/$defs/risk_policy" },
+    "failure_modes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "mitigation"],
+        "properties": {
+          "id": { "$ref": "#/$defs/non_empty_string" },
+          "mitigation": { "$ref": "#/$defs/non_empty_string" }
         }
       }
     },
-    "budgets": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["max_iterations", "wall_clock_minutes"],
-      "properties": {
-        "max_iterations": { "type": "integer", "minimum": 1 },
-        "wall_clock_minutes": { "type": "integer", "minimum": 1 },
-        "max_tokens": { "type": "integer", "minimum": 1 },
-        "max_cost_usd": { "type": "number", "exclusiveMinimum": 0 }
-      }
-    },
-    "no_progress": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["fingerprint_fields", "max_stale_iterations"],
-      "properties": {
-        "fingerprint_fields": {
-          "type": "array",
-          "minItems": 2,
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "max_stale_iterations": { "type": "integer", "minimum": 1 }
-      }
-    },
+    "templates": { "$ref": "#/$defs/string_array" },
     "state": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["path", "journal_path"],
+      "required": ["path", "journal_path", "progress_path"],
       "properties": {
-        "path": { "type": "string", "minLength": 1 },
-        "journal_path": { "type": "string", "minLength": 1 }
+        "path": { "$ref": "#/$defs/non_empty_string" },
+        "journal_path": { "$ref": "#/$defs/non_empty_string" },
+        "progress_path": { "$ref": "#/$defs/non_empty_string" }
       }
     },
-    "escalation": {
+    "observability": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["condition", "owner", "channel", "message_template"],
+      "required": ["trace_fields", "evidence_dir"],
       "properties": {
-        "condition": { "type": "string", "minLength": 1 },
-        "owner": { "type": "string", "minLength": 1 },
-        "channel": { "type": "string", "minLength": 1 },
-        "message_template": { "type": "string", "minLength": 1 }
+        "trace_fields": { "$ref": "#/$defs/string_array" },
+        "evidence_dir": { "$ref": "#/$defs/non_empty_string" }
       }
     },
     "human_gates": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["irreversible_actions"],
+      "required": ["irreversible_actions", "approval_record_path"],
       "properties": {
-        "irreversible_actions": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 }
-        }
+        "irreversible_actions": { "$ref": "#/$defs/string_array" },
+        "approval_record_path": { "$ref": "#/$defs/non_empty_string" }
+      }
+    },
+    "escalation": {
+      "type": "object",
+      "required": ["condition", "owner", "channel", "message_template"],
+      "properties": {
+        "condition": { "$ref": "#/$defs/non_empty_string" },
+        "owner": { "$ref": "#/$defs/non_empty_string" },
+        "channel": { "$ref": "#/$defs/non_empty_string" },
+        "message_template": { "$ref": "#/$defs/non_empty_string" }
       }
     }
   },
   "$defs": {
-    "described": {
+    "non_empty_string": { "type": "string", "minLength": 1 },
+    "string_array": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/non_empty_string" }
+    },
+    "loop_node": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["description"],
+      "required": ["id", "type", "purpose", "entry_conditions", "exit_conditions", "steps", "context_pack", "agent_assignments", "verification_refs"],
       "properties": {
-        "description": { "type": "string", "minLength": 1 }
+        "id": { "$ref": "#/$defs/non_empty_string" },
+        "type": {
+          "enum": ["workflow", "agent_loop", "reflection_loop", "evaluator_optimizer_loop", "parallel_section", "handoff_loop", "human_review_gate"]
+        },
+        "purpose": { "$ref": "#/$defs/non_empty_string" },
+        "entry_conditions": { "$ref": "#/$defs/string_array" },
+        "exit_conditions": { "$ref": "#/$defs/string_array" },
+        "steps": { "$ref": "#/$defs/string_array" },
+        "context_pack": { "$ref": "#/$defs/string_array" },
+        "agent_assignments": { "$ref": "#/$defs/string_array" },
+        "verification_refs": { "$ref": "#/$defs/string_array" },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/loop_node" }
+        }
+      }
+    },
+    "atomic_task": {
+      "type": "object",
+      "required": ["id", "goal", "input_refs", "output_artifacts", "dependencies", "assigned_agent", "acceptance_criteria", "verification_refs", "max_attempts", "estimated_token_budget"],
+      "properties": {
+        "id": { "$ref": "#/$defs/non_empty_string" },
+        "goal": { "$ref": "#/$defs/non_empty_string" },
+        "input_refs": { "$ref": "#/$defs/string_array" },
+        "output_artifacts": { "$ref": "#/$defs/string_array" },
+        "dependencies": { "$ref": "#/$defs/string_array" },
+        "assigned_agent": { "$ref": "#/$defs/non_empty_string" },
+        "tools": { "$ref": "#/$defs/string_array" },
+        "acceptance_criteria": { "$ref": "#/$defs/string_array" },
+        "verification_refs": { "$ref": "#/$defs/string_array" },
+        "max_attempts": { "type": "integer", "minimum": 1 },
+        "estimated_token_budget": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "required": ["id", "role", "model_class", "responsibilities", "context_scope", "may_modify"],
+      "properties": {
+        "id": { "$ref": "#/$defs/non_empty_string" },
+        "role": { "$ref": "#/$defs/non_empty_string" },
+        "model_class": { "$ref": "#/$defs/non_empty_string" },
+        "responsibilities": { "$ref": "#/$defs/string_array" },
+        "context_scope": { "$ref": "#/$defs/non_empty_string" },
+        "may_modify": { "$ref": "#/$defs/string_array" }
+      }
+    },
+    "collaboration_policy": {
+      "type": "object",
+      "required": ["patterns", "subagent_activation", "handoff_contract"],
+      "properties": {
+        "patterns": { "$ref": "#/$defs/string_array" },
+        "subagent_activation": {
+          "type": "object",
+          "required": ["allowed_when", "disallowed_when", "token_budget_policy"],
+          "properties": {
+            "allowed_when": { "$ref": "#/$defs/string_array" },
+            "disallowed_when": { "$ref": "#/$defs/string_array" },
+            "token_budget_policy": { "$ref": "#/$defs/non_empty_string" }
+          }
+        },
+        "handoff_contract": {
+          "type": "object",
+          "required": ["required_fields", "return_fields"],
+          "properties": {
+            "required_fields": { "$ref": "#/$defs/string_array" },
+            "return_fields": { "$ref": "#/$defs/string_array" }
+          }
+        }
+      }
+    },
+    "context_policy": {
+      "type": "object",
+      "required": ["max_context_tokens", "required_context_pack", "retrieval_strategy", "tool_output_trimming", "compaction", "durable_memory", "excluded_context"],
+      "properties": {
+        "max_context_tokens": { "type": "integer", "minimum": 1 },
+        "required_context_pack": { "$ref": "#/$defs/string_array" },
+        "retrieval_strategy": { "$ref": "#/$defs/non_empty_string" },
+        "tool_output_trimming": { "$ref": "#/$defs/non_empty_string" },
+        "compaction": {
+          "type": "object",
+          "required": ["trigger_ratio", "summary_contract"],
+          "properties": {
+            "trigger_ratio": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "summary_contract": { "$ref": "#/$defs/non_empty_string" }
+          }
+        },
+        "durable_memory": {
+          "type": "object",
+          "required": ["state_path", "journal_path", "progress_path"],
+          "properties": {
+            "state_path": { "$ref": "#/$defs/non_empty_string" },
+            "journal_path": { "$ref": "#/$defs/non_empty_string" },
+            "progress_path": { "$ref": "#/$defs/non_empty_string" }
+          }
+        },
+        "excluded_context": { "$ref": "#/$defs/string_array" }
+      }
+    },
+    "termination_policy": {
+      "type": "object",
+      "required": ["success", "failure", "budget_exits", "no_progress", "human_gate"],
+      "properties": {
+        "success": { "$ref": "#/$defs/string_array" },
+        "failure": { "$ref": "#/$defs/string_array" },
+        "budget_exits": {
+          "type": "object",
+          "required": ["max_iterations", "wall_clock_minutes", "max_tokens"],
+          "properties": {
+            "max_iterations": { "type": "integer", "minimum": 1 },
+            "wall_clock_minutes": { "type": "integer", "minimum": 1 },
+            "max_tokens": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "no_progress": {
+          "type": "object",
+          "required": ["fingerprint_fields", "max_stale_iterations"],
+          "properties": {
+            "fingerprint_fields": { "$ref": "#/$defs/string_array" },
+            "max_stale_iterations": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "human_gate": { "$ref": "#/$defs/string_array" }
+      }
+    },
+    "verification_policy": {
+      "type": "object",
+      "required": ["verifiers", "protected_paths", "anti_gaming_rules"],
+      "properties": {
+        "verifiers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "command", "expected_result", "scope"],
+            "properties": {
+              "id": { "$ref": "#/$defs/non_empty_string" },
+              "command": { "$ref": "#/$defs/non_empty_string" },
+              "expected_result": { "$ref": "#/$defs/non_empty_string" },
+              "scope": { "$ref": "#/$defs/non_empty_string" }
+            }
+          }
+        },
+        "protected_paths": { "$ref": "#/$defs/string_array" },
+        "anti_gaming_rules": { "$ref": "#/$defs/string_array" }
+      }
+    },
+    "cost_policy": {
+      "type": "object",
+      "required": ["optimization_goal", "token_budget_by_agent", "stop_when_marginal_value_low"],
+      "properties": {
+        "optimization_goal": { "$ref": "#/$defs/non_empty_string" },
+        "token_budget_by_agent": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 1 }
+        },
+        "stop_when_marginal_value_low": { "type": "boolean" }
+      }
+    },
+    "risk_policy": {
+      "type": "object",
+      "required": ["risk_levels", "high_risk_requires_human", "forbidden_behaviors"],
+      "properties": {
+        "risk_levels": { "$ref": "#/$defs/string_array" },
+        "high_risk_requires_human": { "$ref": "#/$defs/string_array" },
+        "forbidden_behaviors": { "$ref": "#/$defs/string_array" }
       }
     }
   }

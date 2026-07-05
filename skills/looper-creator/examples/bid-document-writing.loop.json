@@ -51,8 +51,8 @@
       "assigned_agent": "worker",
       "dependencies": [],
       "estimated_token_budget": 20000,
-      "goal": "Execute the next independently verifiable task slice.",
-      "id": "generic-task-task-1",
+      "goal": "Write one compliant bid section mapped to scoring requirements and evidence refs.",
+      "id": "bid-document-writing-task-1",
       "input_refs": [
         "requirements.md",
         "src/"
@@ -173,7 +173,7 @@
   "escalation": {
     "channel": "Codex thread",
     "condition": "budget, no-progress, ambiguity, or human-gate exit is reached",
-    "message_template": "Loop Generic Task Loop stopped: {reason}. Evidence: {evidence_ref}.",
+    "message_template": "Loop Bid Document Writing Loop stopped: {reason}. Evidence: {evidence_ref}.",
     "owner": "human maintainer"
   },
   "failure_modes": [
@@ -267,19 +267,19 @@
     }
   ],
   "metadata": {
-    "description": "Clarify, decompose, execute, verify, and record a general high-value task.",
-    "id": "generic-task",
+    "description": "Decompose a bid document into compliant sections, assign writing/review loops, and verify coverage.",
+    "id": "bid-document-writing",
     "locale": "en",
-    "name": "Generic Task Loop"
+    "name": "Bid Document Writing Loop"
   },
   "objective": {
     "business_value": "Reduce repeated agent context loading while preserving deterministic completion evidence.",
-    "done_definition": "All atomic tasks are accepted and terminal verification evidence is recorded.",
+    "done_definition": "All requirement mappings, section drafts, compliance checks, and final review gates pass.",
     "non_goals": [
       "Do not deploy automatically",
       "Do not rewrite unrelated modules"
     ],
-    "user_goal": "Complete one user task with explicit clarification, context budget, verification, and escalation rules."
+    "user_goal": "Produce a bid document that maps every scored requirement to evidence and review status."
   },
   "observability": {
     "evidence_dir": "evidence",
@@ -317,7 +317,7 @@
     "progress_path": "PROGRESS.md"
   },
   "templates": [
-    "generic-task"
+    "bid-document-writing"
   ],
   "termination_policy": {
     "budget_exits": {
@@ -359,7 +359,7 @@
     ],
     "verifiers": [
       {
-        "command": "test -f loop.json && test -f state.json && test -f tasks.json",
+        "command": "test -f LOOP.md && test -f tasks.json && test -f agents.json",
         "expected_result": "exit code 0",
         "id": "unit-tests",
         "scope": "per_task"

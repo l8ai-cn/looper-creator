@@ -1,0 +1,15 @@
+[
+  {
+    "id": "task-1",
+    "goal": "Complete one independently verifiable task slice.",
+    "input_refs": ["loop.json", "PROGRESS.md"],
+    "output_artifacts": ["artifact ref", "evidence ref"],
+    "dependencies": [],
+    "assigned_agent": "worker",
+    "tools": ["shell", "apply_patch"],
+    "acceptance_criteria": ["linked verifier exits 0"],
+    "verification_refs": ["terminal"],
+    "max_attempts": 3,
+    "estimated_token_budget": 20000
+  }
+]
