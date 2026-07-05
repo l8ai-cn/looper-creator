@@ -35,5 +35,13 @@ jobs:
             --manifest skills/looper-creator/examples/feature-development.loop.json \
             --output /tmp/example-loop
           python3 skills/looper-creator/scripts/validate_loop_project.py /tmp/example-loop
+          (cd /tmp/example-loop && bash scripts/verify.sh)
+      - name: Generate website testing sample
+        run: |
+          python3 skills/looper-creator/scripts/create_loop_project.py \
+            --manifest skills/looper-creator/examples/website-browser-testing.loop.json \
+            --output /tmp/website-loop
+          python3 skills/looper-creator/scripts/validate_loop_project.py /tmp/website-loop
+          (cd /tmp/website-loop && bash scripts/verify.sh)
       - name: Run tests
         run: python3 -m unittest discover -s skills/looper-creator/tests

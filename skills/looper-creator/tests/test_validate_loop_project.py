@@ -345,6 +345,52 @@ class LooperCreatorValidationTests(unittest.TestCase):
         errors = validate_manifest(manifest)
         self.assertTrue(any("acceptance_checklist.path" in error and "relative" in error for error in errors))
 
+    def test_v2_rejects_durable_memory_state_path_mismatch(self):
+        manifest = recursive_manifest()
+        manifest["context_policy"]["durable_memory"]["progress_path"] = "OTHER_PROGRESS.md"
+        errors = validate_manifest(manifest)
+        self.assertTrue(any("durable_memory.progress_path must match state.progress_path" in error for error in errors))
+
+    def test_v2_rejects_acceptance_checklist_drift_from_atomic_task(self):
+        manifest = recursive_manifest()
+        item = manifest["acceptance_checklist"]["items"][0]
+        item["acceptance_criteria"] = ["reviewer accepts diff"]
+        item["verification_refs"] = ["terminal"]
+        item["evidence_refs"] = ["source diff"]
+        errors = validate_manifest(manifest)
+        self.assertTrue(any("must include atomic task acceptance criterion" in error for error in errors))
+        self.assertTrue(any("must include atomic task verifier" in error for error in errors))
+        self.assertTrue(any("must include atomic task output artifact" in error for error in errors))
+
+    def test_generated_project_honors_custom_runtime_paths(self):
+        manifest = recursive_manifest()
+        manifest["state"] = {
+            "path": "run/state.json",
+            "journal_path": "run/journal.jsonl",
+            "progress_path": "run/PROGRESS.md",
+        }
+        manifest["context_policy"]["durable_memory"] = {
+            "state_path": "run/state.json",
+            "journal_path": "run/journal.jsonl",
+            "progress_path": "run/PROGRESS.md",
+        }
+        manifest["clarification_policy"]["assumption_policy"]["record_path"] = "run/PROGRESS.md"
+        manifest["human_gates"]["approval_record_path"] = "run/PROGRESS.md"
+        manifest["acceptance_checklist"]["path"] = "run/ACCEPTANCE.md"
+        self.assertEqual([], validate_manifest(manifest))
+        output = self.tmpdir / "generated-custom-paths"
+        create_project(manifest, output)
+        self.assertEqual([], validate_project(output))
+        self.assertTrue((output / "run" / "PROGRESS.md").exists())
+        self.assertTrue((output / "run" / "ACCEPTANCE.md").exists())
+        self.assertFalse((output / "PROGRESS.md").exists())
+        self.assertFalse((output / "ACCEPTANCE.md").exists())
+        adapter_text = (output / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("run/PROGRESS.md", adapter_text)
+        self.assertIn("run/ACCEPTANCE.md", adapter_text)
+        acceptance_text = (output / "run" / "ACCEPTANCE.md").read_text(encoding="utf-8")
+        self.assertIn("run/PROGRESS.md", acceptance_text)
+
     def test_generated_project_contains_acceptance_checklist_and_verifier(self):
         manifest = recursive_manifest()
         self.assertEqual([], validate_manifest(manifest))
@@ -369,7 +415,7 @@ class LooperCreatorValidationTests(unittest.TestCase):
         state_path = output / "state.json"
         state = json.loads(state_path.read_text(encoding="utf-8"))
         state["status"] = "complete"
-        state_path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        state_path.write_text(json.dumps(state, separators=(",", ":"), sort_keys=True) + "\n", encoding="utf-8")
 
         result = subprocess.run(["bash", "scripts/verify.sh"], cwd=output, check=False)
         self.assertNotEqual(0, result.returncode)

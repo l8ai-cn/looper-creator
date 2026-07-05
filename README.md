@@ -135,6 +135,28 @@ time only after its acceptance criteria, verifier refs, and evidence refs are
 satisfied. If `state.json` reaches `complete`, `scripts/verify.sh` rejects any
 remaining unchecked item.
 
+The semantic validator also checks contracts that JSON Schema cannot express:
+`context_policy.durable_memory` must match `state`, every atomic task must have
+one checklist item, and checklist criteria, verifier refs, and evidence refs must
+include the task's own acceptance criteria, verifier refs, and output artifacts.
+
+## Publish To GitHub
+
+This repository is ready for a public GitHub remote once GitHub authentication is
+available locally:
+
+```bash
+gh auth status
+gh repo create looper-creator --public --source . --remote origin --push
+```
+
+If the repository already exists, add its remote and push:
+
+```bash
+git remote add origin git@github.com:<owner>/looper-creator.git
+git push -u origin main
+```
+
 ## Runtime Adapters
 
 `loop.json` is the canonical manifest. Runtime-specific files are generated from

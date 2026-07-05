@@ -208,11 +208,12 @@ def _collect_loop_nodes(nodes: list[Any], errors: list[str], path: str, depth: i
 def _validate_acceptance_checklist(
     manifest: dict[str, Any],
     errors: list[str],
-    task_ids: set[str],
+    task_by_id: dict[str, dict[str, Any]],
     loop_node_ids: set[str],
     agent_ids: set[str],
     verifier_ids: set[str],
 ) -> None:
+    task_ids = set(task_by_id)
     checklist = _as_dict(manifest.get("acceptance_checklist"), "acceptance_checklist", errors)
     _validate_project_path(checklist.get("path"), "acceptance_checklist.path", errors)
     _require(_non_empty_string(checklist.get("update_policy")), "acceptance_checklist.update_policy must be non-empty", errors)
@@ -237,31 +238,56 @@ def _validate_acceptance_checklist(
         )
         if _non_empty_string(task_id):
             _require(task_id in task_ids, f"{path}.task_id must reference an atomic task id", errors)
+            _require(task_id not in covered_tasks, f"{path}.task_id duplicates another acceptance checklist task item", errors)
             covered_tasks.add(task_id)
         if _non_empty_string(loop_node_id):
             _require(loop_node_id in loop_node_ids, f"{path}.loop_node_id must reference a loop node id", errors)
         if _non_empty_string(item.get("owner_agent")):
             _require(item["owner_agent"] in agent_ids, f"{path}.owner_agent must reference an agent id", errors)
-        _string_list(item.get("acceptance_criteria"), f"{path}.acceptance_criteria", errors)
+        criteria = _string_list(item.get("acceptance_criteria"), f"{path}.acceptance_criteria", errors)
         refs = _string_list(item.get("verification_refs"), f"{path}.verification_refs", errors)
-        _string_list(item.get("evidence_refs"), f"{path}.evidence_refs", errors)
+        evidence_refs = _string_list(item.get("evidence_refs"), f"{path}.evidence_refs", errors)
         for ref in refs:
             _require(ref in verifier_ids, f"{path}.verification_refs contains unknown verifier id: {ref}", errors)
+        if _non_empty_string(task_id) and task_id in task_by_id:
+            task = task_by_id[task_id]
+            for criterion in task.get("acceptance_criteria", []):
+                if _non_empty_string(criterion):
+                    _require(
+                        criterion in criteria,
+                        f"{path}.acceptance_criteria must include atomic task acceptance criterion: {criterion}",
+                        errors,
+                    )
+            for ref in task.get("verification_refs", []):
+                if _non_empty_string(ref):
+                    _require(
+                        ref in refs,
+                        f"{path}.verification_refs must include atomic task verifier: {ref}",
+                        errors,
+                    )
+            for artifact in task.get("output_artifacts", []):
+                if _non_empty_string(artifact):
+                    _require(
+                        artifact in evidence_refs,
+                        f"{path}.evidence_refs must include atomic task output artifact: {artifact}",
+                        errors,
+                    )
     missing_tasks = sorted(task_ids - covered_tasks)
     for task_id in missing_tasks:
         errors.append(f"acceptance_checklist.items must include a task_id item for atomic task: {task_id}")
 
 
-def _validate_atomic_tasks(manifest: dict[str, Any], errors: list[str], agent_ids: set[str], verifier_ids: set[str]) -> set[str]:
-    task_ids: set[str] = set()
+def _validate_atomic_tasks(manifest: dict[str, Any], errors: list[str], agent_ids: set[str], verifier_ids: set[str]) -> dict[str, dict[str, Any]]:
+    task_by_id: dict[str, dict[str, Any]] = {}
     for index, raw_task in enumerate(_as_list(manifest.get("atomic_tasks"), "atomic_tasks", errors)):
         path = f"atomic_tasks[{index}]"
         task = _as_dict(raw_task, path, errors)
         task_id = task.get("id")
         _require(_non_empty_string(task_id), f"{path}.id must be non-empty", errors)
         if _non_empty_string(task_id):
-            _require(task_id not in task_ids, f"{path}.id duplicates another atomic task id", errors)
-            task_ids.add(task_id)
+            _require(task_id not in task_by_id, f"{path}.id duplicates another atomic task id", errors)
+            if task_id not in task_by_id:
+                task_by_id[task_id] = task
         for key in ("goal", "assigned_agent"):
             _require(_non_empty_string(task.get(key)), f"{path}.{key} must be non-empty", errors)
         _string_list(task.get("input_refs"), f"{path}.input_refs", errors)
@@ -276,7 +302,7 @@ def _validate_atomic_tasks(manifest: dict[str, Any], errors: list[str], agent_id
             _require(task["assigned_agent"] in agent_ids, f"{path}.assigned_agent must reference an agent id", errors)
         for ref in refs:
             _require(ref in verifier_ids, f"{path}.verification_refs contains unknown verifier id: {ref}", errors)
-    return task_ids
+    return task_by_id
 
 
 def _validate_agents(manifest: dict[str, Any], errors: list[str]) -> set[str]:
@@ -328,6 +354,20 @@ def _validate_context_policy(manifest: dict[str, Any], errors: list[str]) -> Non
     durable = _as_dict(policy.get("durable_memory"), "context_policy.durable_memory", errors)
     for key in ("state_path", "journal_path", "progress_path"):
         _validate_project_path(durable.get(key), f"context_policy.durable_memory.{key}", errors)
+    state = manifest.get("state", {}) if isinstance(manifest.get("state"), dict) else {}
+    for durable_key, state_key in (
+        ("state_path", "path"),
+        ("journal_path", "journal_path"),
+        ("progress_path", "progress_path"),
+    ):
+        durable_value = durable.get(durable_key)
+        state_value = state.get(state_key)
+        if _non_empty_string(durable_value) and _non_empty_string(state_value):
+            _require(
+                durable_value == state_value,
+                f"context_policy.durable_memory.{durable_key} must match state.{state_key}",
+                errors,
+            )
     _string_list(policy.get("excluded_context"), "context_policy.excluded_context", errors)
 
 
@@ -477,8 +517,8 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
     for index, raw_node in enumerate(loop_nodes):
         _validate_loop_node_references(raw_node, f"loop_nodes[{index}]", errors, agent_ids, verifier_ids)
 
-    task_ids = _validate_atomic_tasks(manifest, errors, agent_ids, verifier_ids)
-    _validate_acceptance_checklist(manifest, errors, task_ids, loop_node_ids, agent_ids, verifier_ids)
+    task_by_id = _validate_atomic_tasks(manifest, errors, agent_ids, verifier_ids)
+    _validate_acceptance_checklist(manifest, errors, task_by_id, loop_node_ids, agent_ids, verifier_ids)
     _validate_collaboration_policy(manifest, errors)
     _validate_context_policy(manifest, errors)
     _validate_termination_policy(manifest, errors)
@@ -533,7 +573,6 @@ def validate_project(path: Path) -> list[str]:
     state = manifest.get("state", {}) if isinstance(manifest.get("state"), dict) else {}
     required_files = [
         "LOOP.md",
-        "PROGRESS.md",
         "loop.json",
         "loops.json",
         "tasks.json",

@@ -52,6 +52,10 @@ a blocked loop, not a valid loop.
      `atomic_tasks`.
    - Define `acceptance_checklist.items` so every atomic task has a checkbox,
      owner agent, criteria, verifier refs, and evidence refs.
+   - Keep `context_policy.durable_memory` paths identical to `state` paths.
+   - Keep each checklist task item aligned with its atomic task: criteria,
+     verifier refs, and evidence refs must include the task's criteria,
+     verifier refs, and output artifacts.
 
 4. **Validate before generation**
    - Run:
@@ -101,6 +105,9 @@ a blocked loop, not a valid loop.
   atomic task is accepted; reopen it if later verification invalidates the
   evidence. Terminal success requires all items checked and the terminal
   verifier passing.
+- Do not let context files drift. `state.path`, `state.progress_path`, and
+  `state.journal_path` are the durable memory paths, and
+  `context_policy.durable_memory` must point to the same files.
 - For browser-testing loops, do not trust raw automated findings directly.
   Require a review pass that merges duplicate network failures, rejects
   navigation-abort noise, separates seeded route leads from confirmed visible

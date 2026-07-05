@@ -49,6 +49,10 @@ def _checklist_path(manifest: dict[str, Any]) -> str:
     return manifest["acceptance_checklist"]["path"]
 
 
+def _progress_path(manifest: dict[str, Any]) -> str:
+    return manifest["state"]["progress_path"]
+
+
 def render_loop_md(manifest: dict[str, Any]) -> str:
     metadata = manifest["metadata"]
     objective = manifest["objective"]
@@ -156,6 +160,7 @@ Protected paths:
 
 def render_acceptance_md(manifest: dict[str, Any]) -> str:
     checklist = manifest["acceptance_checklist"]
+    progress_path = _progress_path(manifest)
     lines = [
         "# Acceptance Checklist",
         "",
@@ -167,7 +172,7 @@ def render_acceptance_md(manifest: dict[str, Any]) -> str:
         "",
         "- Only change `[ ]` to `[x]` after every acceptance criterion passes.",
         "- Evidence refs must point to existing artifacts, command outputs, screenshots, logs, diffs, or review notes.",
-        "- If later verification invalidates an item, change it back to `[ ]` and record the reason in `PROGRESS.md`.",
+        f"- If later verification invalidates an item, change it back to `[ ]` and record the reason in `{progress_path}`.",
         "- Terminal completion may only be claimed when every checklist item is checked and the terminal verifier passes.",
         "",
         "## Items",
@@ -276,7 +281,7 @@ def render_verify_sh(manifest: dict[str, Any]) -> str:
         [
             f"test -s {checklist_path}",
             f"grep -Eq -- '- \\[[ xX]\\]' {checklist_path}",
-            f"if grep -q '\"status\": \"complete\"' {state_path}; then ! grep -Eq -- '- \\[ \\]' {checklist_path}; fi",
+            f"if grep -Eq '\"status\"[[:space:]]*:[[:space:]]*\"complete\"' {state_path}; then ! grep -Eq -- '- \\[ \\]' {checklist_path}; fi",
         ]
     )
     body = "\n".join(commands)
@@ -321,6 +326,7 @@ Platform selection query: {portability['platform_selection_query']}
 
 def render_codex_agents_md(manifest: dict[str, Any]) -> str:
     checklist_path = _checklist_path(manifest)
+    progress_path = _progress_path(manifest)
     return f"""# AGENTS.md
 
 This file adapts `{manifest['metadata']['name']}` for Codex.
@@ -329,7 +335,7 @@ Canonical loop contract: `loop.json`
 
 ## Execution Rules
 
-- Re-read `loop.json`, `state.json`, `PROGRESS.md`, `{checklist_path}`, `tasks.json`, and `agents.json` before each loop cycle.
+- Re-read `loop.json`, `state.json`, `{progress_path}`, `{checklist_path}`, `tasks.json`, and `agents.json` before each loop cycle.
 - Mark `{checklist_path}` items checked only after their criteria, verifier refs, and evidence refs are satisfied.
 - Use subagents only when `collaboration_policy.subagent_activation.allowed_when` applies.
 - Do not weaken `verification_policy.protected_paths` or terminal verifier commands.
@@ -345,6 +351,7 @@ a stricter runtime-specific verifier.
 
 def render_claude_md(manifest: dict[str, Any]) -> str:
     checklist_path = _checklist_path(manifest)
+    progress_path = _progress_path(manifest)
     return f"""# CLAUDE.md
 
 This file adapts `{manifest['metadata']['name']}` for Claude Code.
@@ -353,7 +360,7 @@ Canonical loop contract: `loop.json`
 
 ## Execution Rules
 
-- Load `loop.json`, `state.json`, `PROGRESS.md`, `{checklist_path}`, `tasks.json`, and `agents.json` before acting.
+- Load `loop.json`, `state.json`, `{progress_path}`, `{checklist_path}`, `tasks.json`, and `agents.json` before acting.
 - Mark `{checklist_path}` items checked only after their criteria, verifier refs, and evidence refs are satisfied.
 - Use Claude Code subagents only when the manifest's subagent activation policy applies.
 - Use hooks only to enforce or observe the manifest contract; do not use hooks to bypass verification.
@@ -383,6 +390,7 @@ def render_claude_settings_json() -> str:
 
 def render_cursor_rule(manifest: dict[str, Any]) -> str:
     checklist_path = _checklist_path(manifest)
+    progress_path = _progress_path(manifest)
     return f"""---
 description: Looper Creator runtime adapter for {manifest['metadata']['name']}
 alwaysApply: false
@@ -392,7 +400,7 @@ alwaysApply: false
 
 Canonical loop contract: `loop.json`
 
-- Load `loop.json`, `state.json`, `PROGRESS.md`, `{checklist_path}`, `tasks.json`, and `agents.json` before each loop cycle.
+- Load `loop.json`, `state.json`, `{progress_path}`, `{checklist_path}`, `tasks.json`, and `agents.json` before each loop cycle.
 - Mark `{checklist_path}` items checked only after their criteria, verifier refs, and evidence refs are satisfied.
 - Use Cursor subagents or cloud agents only when the manifest's activation policy applies.
 - Keep generated adapter files subordinate to `loop.json`.
