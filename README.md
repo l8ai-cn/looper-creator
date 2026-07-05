@@ -33,12 +33,14 @@ agents.json
 context-policy.json
 state.json
 journal.jsonl
+runtime.json
 scripts/verify.sh
 ADAPTERS.md
 AGENTS.md
-CLAUDE.md
-.cursor/rules/looper-creator.mdc
 ```
+
+`AGENTS.md` is shown above because the default runtime target is `codex`.
+Generate other runtime adapters explicitly with `--runtime-target`.
 
 The v2 manifest models:
 
@@ -159,13 +161,37 @@ git push -u origin main
 
 ## Runtime Adapters
 
-`loop.json` is the canonical manifest. Runtime-specific files are generated from
-`execution_adapters`:
+`loop.json` is the canonical manifest. `runtime.json` records the selected
+runtime adapter for a generated project.
+
+By default, project roots generate only the Codex adapter:
+
+```bash
+python3 skills/looper-creator/scripts/create_loop_project.py \
+  --manifest skills/looper-creator/examples/feature-development.loop.json \
+  --output /tmp/example-loop \
+  --runtime-target codex
+```
+
+Generate another root adapter explicitly:
+
+```bash
+python3 skills/looper-creator/scripts/create_loop_project.py \
+  --manifest skills/looper-creator/examples/feature-development.loop.json \
+  --output /tmp/claude-loop \
+  --runtime-target claude_code
+```
+
+Runtime-specific files are generated from `execution_adapters`:
 
 - Codex: `AGENTS.md`
 - Claude Code: `CLAUDE.md` and optional `.claude/settings.json`
 - Cursor: `.cursor/rules/looper-creator.mdc`
 - Portable: generic files only
+
+Unselected runtime adapter files are not generated at the project root. When
+`--force` regenerates a project for a different runtime, stale unselected adapter
+files are removed.
 
 Adapter limits must not weaken verification. If a runtime cannot support a
 declared capability, the required behavior is `block_and_report`.

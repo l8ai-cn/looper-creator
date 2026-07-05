@@ -53,6 +53,13 @@ def _progress_path(manifest: dict[str, Any]) -> str:
     return manifest["state"]["progress_path"]
 
 
+def _adapter_for_target(manifest: dict[str, Any], target: str) -> dict[str, Any]:
+    for adapter in manifest["execution_adapters"]:
+        if adapter.get("target") == target:
+            return adapter
+    raise ValueError(f"runtime target {target!r} is not declared in execution_adapters")
+
+
 def render_loop_md(manifest: dict[str, Any]) -> str:
     metadata = manifest["metadata"]
     objective = manifest["objective"]
@@ -378,7 +385,7 @@ def render_claude_settings_json() -> str:
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "python3 scripts/validate_loop_project.py . >/dev/null 2>&1 || true"
+                            "command": "bash scripts/verify.sh"
                         }
                     ]
                 }
@@ -409,32 +416,71 @@ Canonical loop contract: `loop.json`
 """
 
 
-def generate_adapter_files(manifest: dict[str, Any], output: Path) -> None:
-    _write(output / "ADAPTERS.md", render_adapters_md(manifest))
+def render_runtime_json(adapter: dict[str, Any]) -> str:
+    return _json(
+        {
+            "target": adapter["target"],
+            "generated_adapter_files": adapter.get("generated_files", []),
+            "instruction_files": adapter.get("instruction_files", []),
+            "unsupported_capability_behavior": adapter.get("unsupported_capability_behavior"),
+        }
+    )
+
+
+def _remove_empty_parents(path: Path, stop: Path) -> None:
+    for parent in path.parents:
+        if parent == stop:
+            break
+        try:
+            parent.rmdir()
+        except OSError:
+            break
+
+
+def cleanup_unselected_adapter_files(manifest: dict[str, Any], output: Path, runtime_target: str) -> None:
+    selected = set(_adapter_for_target(manifest, runtime_target).get("generated_files", []))
+    stale: set[str] = set()
     for adapter in manifest["execution_adapters"]:
-        target = adapter["target"]
-        generated = set(adapter.get("generated_files", []))
-        if target == "codex" and "AGENTS.md" in generated:
-            _write(output / "AGENTS.md", render_codex_agents_md(manifest))
-        if target == "claude_code":
-            if "CLAUDE.md" in generated:
-                _write(output / "CLAUDE.md", render_claude_md(manifest))
-            if ".claude/settings.json" in generated:
-                _write(output / ".claude" / "settings.json", render_claude_settings_json())
-        if target == "cursor" and ".cursor/rules/looper-creator.mdc" in generated:
-            _write(output / ".cursor" / "rules" / "looper-creator.mdc", render_cursor_rule(manifest))
+        if adapter.get("target") == runtime_target:
+            continue
+        for relative in adapter.get("generated_files", []):
+            if relative not in selected:
+                stale.add(relative)
+    for relative in sorted(stale):
+        path = output / relative
+        if path.is_file() or path.is_symlink():
+            path.unlink()
+            _remove_empty_parents(path.parent, output)
 
 
-def create_project(manifest: dict[str, Any], output: Path, force: bool = False) -> None:
+def generate_adapter_files(manifest: dict[str, Any], output: Path, runtime_target: str) -> None:
+    _write(output / "ADAPTERS.md", render_adapters_md(manifest))
+    adapter = _adapter_for_target(manifest, runtime_target)
+    generated = set(adapter.get("generated_files", []))
+    _write(output / "runtime.json", render_runtime_json(adapter))
+    if runtime_target == "codex" and "AGENTS.md" in generated:
+        _write(output / "AGENTS.md", render_codex_agents_md(manifest))
+    if runtime_target == "claude_code":
+        if "CLAUDE.md" in generated:
+            _write(output / "CLAUDE.md", render_claude_md(manifest))
+        if ".claude/settings.json" in generated:
+            _write(output / ".claude" / "settings.json", render_claude_settings_json())
+    if runtime_target == "cursor" and ".cursor/rules/looper-creator.mdc" in generated:
+        _write(output / ".cursor" / "rules" / "looper-creator.mdc", render_cursor_rule(manifest))
+
+
+def create_project(manifest: dict[str, Any], output: Path, force: bool = False, runtime_target: str = "codex") -> None:
     errors = validate_manifest(manifest)
     if errors:
         raise ValueError("manifest validation failed:\n" + "\n".join(f"- {error}" for error in errors))
+    _adapter_for_target(manifest, runtime_target)
 
     if output.exists() and any(output.iterdir()) and not force:
         raise FileExistsError(f"{output} exists and is not empty; pass --force to overwrite generated files")
 
     state = manifest["state"]
     output.mkdir(parents=True, exist_ok=True)
+    cleanup_unselected_adapter_files(manifest, output, runtime_target)
     _write(output / "loop.json", _json(manifest))
     _write(output / "LOOP.md", render_loop_md(manifest))
     _write(output / _checklist_path(manifest), render_acceptance_md(manifest))
@@ -447,7 +493,7 @@ def create_project(manifest: dict[str, Any], output: Path, force: bool = False) 
     _write(output / "context-policy.json", _json(manifest["context_policy"]))
     (output / manifest["observability"]["evidence_dir"]).mkdir(parents=True, exist_ok=True)
     _write(output / "scripts" / "verify.sh", render_verify_sh(manifest), executable=True)
-    generate_adapter_files(manifest, output)
+    generate_adapter_files(manifest, output, runtime_target)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -455,6 +501,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", required=True, help="Path to loop manifest JSON")
     parser.add_argument("--output", help="Output directory. Defaults to manifest metadata.name slug beside the manifest.")
     parser.add_argument("--force", action="store_true", help="Allow writing into an existing non-empty output directory")
+    parser.add_argument(
+        "--runtime-target",
+        choices=["codex", "claude_code", "cursor", "portable"],
+        default="codex",
+        help="Runtime adapter to generate at the project root. Defaults to codex.",
+    )
     args = parser.parse_args(argv)
 
     manifest_path = Path(args.manifest)
@@ -462,7 +514,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest = load_manifest(manifest_path)
         name = manifest.get("metadata", {}).get("name", "loop-project")
         output = Path(args.output) if args.output else manifest_path.parent / _slug(name)
-        create_project(manifest, output, force=args.force)
+        create_project(manifest, output, force=args.force, runtime_target=args.runtime_target)
         errors = validate_project(output)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

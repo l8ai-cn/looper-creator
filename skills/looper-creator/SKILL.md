@@ -80,17 +80,22 @@ a blocked loop, not a valid loop.
      ```
    - A valid project contains `LOOP.md`, `PROGRESS.md`, `ACCEPTANCE.md`, `loop.json`,
      `loops.json`, `tasks.json`, `agents.json`, `context-policy.json`,
-     `state.json`, `journal.jsonl`, `ADAPTERS.md`, runtime adapter files, and
-     `scripts/verify.sh`.
+     `state.json`, `journal.jsonl`, `runtime.json`, `ADAPTERS.md`, the selected
+     runtime adapter files, and `scripts/verify.sh`.
 
 ## Design Rules
 
 - Represent task decomposition as a recursive graph of loop nodes. A node may be
   a workflow, agent loop, reflection loop, evaluator-optimizer loop, parallel
   section, handoff loop, or human review gate.
-- Treat `loop.json` as the canonical manifest. Platform files such as
+- Treat `loop.json` as the canonical manifest. `runtime.json` records the
+  selected runtime adapter for a generated project. Platform files such as
   `AGENTS.md`, `CLAUDE.md`, and `.cursor/rules/looper-creator.mdc` are generated
   adapters, not the source of truth.
+- Generate only the selected runtime adapter at the project root. Use
+  `--runtime-target codex`, `--runtime-target claude_code`, or
+  `--runtime-target cursor` when scaffolding. Do not leave unselected runtime
+  files at the root.
 - Do not weaken verification for platform limits. If a runtime lacks hooks,
   subagents, or another declared capability, block and report rather than
   silently degrading the loop.

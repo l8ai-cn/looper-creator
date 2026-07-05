@@ -305,14 +305,54 @@ class LooperCreatorValidationTests(unittest.TestCase):
             "context-policy.json",
             "ADAPTERS.md",
             "AGENTS.md",
-            "CLAUDE.md",
-            ".claude/settings.json",
-            ".cursor/rules/looper-creator.mdc",
+            "runtime.json",
             "scripts/verify.sh",
         ]:
             self.assertTrue((output / relative).exists(), relative)
+        for relative in [
+            "CLAUDE.md",
+            ".claude/settings.json",
+            ".cursor/rules/looper-creator.mdc",
+        ]:
+            self.assertFalse((output / relative).exists(), relative)
         verifier_script = (output / "scripts" / "verify.sh").read_text(encoding="utf-8")
         self.assertNotIn("python3 -m unittest discover -s tests", verifier_script)
+
+    def test_generated_project_can_select_claude_runtime_adapter(self):
+        manifest = recursive_manifest()
+        output = self.tmpdir / "generated-claude"
+        create_project(manifest, output, runtime_target="claude_code")
+        self.assertEqual([], validate_project(output))
+        self.assertTrue((output / "CLAUDE.md").exists())
+        self.assertTrue((output / ".claude" / "settings.json").exists())
+        self.assertFalse((output / "AGENTS.md").exists())
+        self.assertFalse((output / ".cursor" / "rules" / "looper-creator.mdc").exists())
+        runtime = json.loads((output / "runtime.json").read_text(encoding="utf-8"))
+        self.assertEqual("claude_code", runtime["target"])
+
+    def test_generated_claude_hook_does_not_weaken_verification(self):
+        manifest = recursive_manifest()
+        output = self.tmpdir / "generated-claude-hook"
+        create_project(manifest, output, runtime_target="claude_code")
+        settings_text = (output / ".claude" / "settings.json").read_text(encoding="utf-8")
+        self.assertNotIn("|| true", settings_text)
+        self.assertNotIn("continue-on-error", settings_text)
+        self.assertNotIn("set +e", settings_text)
+        self.assertNotIn("validate_loop_project.py", settings_text)
+        self.assertIn("bash scripts/verify.sh", settings_text)
+
+    def test_force_regeneration_removes_stale_unselected_adapter_files(self):
+        manifest = recursive_manifest()
+        output = self.tmpdir / "generated-force-runtime"
+        create_project(manifest, output, runtime_target="codex")
+        self.assertTrue((output / "AGENTS.md").exists())
+
+        create_project(manifest, output, force=True, runtime_target="claude_code")
+
+        self.assertEqual([], validate_project(output))
+        self.assertFalse((output / "AGENTS.md").exists())
+        self.assertTrue((output / "CLAUDE.md").exists())
+        self.assertTrue((output / ".claude" / "settings.json").exists())
 
     def test_v2_requires_clarification_policy_for_ambiguous_requests(self):
         manifest = recursive_manifest()

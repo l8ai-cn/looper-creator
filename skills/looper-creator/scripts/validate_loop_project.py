@@ -558,6 +558,31 @@ def load_manifest(path: Path) -> dict[str, Any]:
     return data
 
 
+def _read_project_json(path: Path, name: str, errors: list[str]) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        errors.append(f"missing generated file: {name}")
+        return {}
+    except json.JSONDecodeError as exc:
+        errors.append(f"{name} must contain valid JSON: {exc}")
+        return {}
+    if not isinstance(data, dict):
+        errors.append(f"{name} must contain a JSON object")
+        return {}
+    return data
+
+
+def _reject_unsafe_generated_text(project_path: Path, relatives: list[str], errors: list[str]) -> None:
+    for relative in relatives:
+        file_path = project_path / relative
+        if not file_path.exists() or not file_path.is_file():
+            continue
+        text = file_path.read_text(encoding="utf-8", errors="replace")
+        for fragment in UNSAFE_COMMAND_FRAGMENTS:
+            _require(fragment not in text, f"{relative} must not contain '{fragment}'", errors)
+
+
 def validate_project(path: Path) -> list[str]:
     errors: list[str] = []
     manifest_path = path / "loop.json"
@@ -579,6 +604,7 @@ def validate_project(path: Path) -> list[str]:
         "agents.json",
         "context-policy.json",
         "ADAPTERS.md",
+        "runtime.json",
         state.get("path", "state.json"),
         state.get("journal_path", "journal.jsonl"),
         state.get("progress_path", "PROGRESS.md"),
@@ -591,15 +617,42 @@ def validate_project(path: Path) -> list[str]:
         if isinstance(relative, str):
             _require((path / relative).exists(), f"missing generated file: {relative}", errors)
 
-    for adapter in manifest.get("execution_adapters", []):
-        if isinstance(adapter, dict):
-            for relative in adapter.get("generated_files", []):
-                if isinstance(relative, str):
-                    _require((path / relative).exists(), f"missing adapter generated file: {relative}", errors)
+    runtime = _read_project_json(path / "runtime.json", "runtime.json", errors)
+    selected_target = runtime.get("target")
+    _require(selected_target in ADAPTER_TARGETS, "runtime.json.target must be codex, claude_code, cursor, or portable", errors)
+    adapters = [adapter for adapter in manifest.get("execution_adapters", []) if isinstance(adapter, dict)]
+    selected_adapters = [adapter for adapter in adapters if adapter.get("target") == selected_target]
+    _require(len(selected_adapters) == 1, "runtime.json.target must reference exactly one execution adapter", errors)
+    selected_files: set[str] = set()
+    if selected_adapters:
+        selected_files = {relative for relative in selected_adapters[0].get("generated_files", []) if isinstance(relative, str)}
+        runtime_files = runtime.get("generated_adapter_files", [])
+        if isinstance(runtime_files, list):
+            _require(
+                set(item for item in runtime_files if isinstance(item, str)) == selected_files,
+                "runtime.json.generated_adapter_files must match the selected execution adapter",
+                errors,
+            )
+        else:
+            errors.append("runtime.json.generated_adapter_files must be a list")
+
+    for relative in selected_files:
+        _require((path / relative).exists(), f"missing selected adapter generated file: {relative}", errors)
+
+    unselected_files: set[str] = set()
+    for adapter in adapters:
+        if adapter.get("target") == selected_target:
+            continue
+        for relative in adapter.get("generated_files", []):
+            if isinstance(relative, str) and relative not in selected_files:
+                unselected_files.add(relative)
+    for relative in sorted(unselected_files):
+        _require(not (path / relative).exists(), f"unselected adapter file should not be generated at project root: {relative}", errors)
 
     verify_path = path / "scripts" / "verify.sh"
     if verify_path.exists():
         _require(os.access(verify_path, os.X_OK), "scripts/verify.sh must be executable", errors)
+    _reject_unsafe_generated_text(path, ["scripts/verify.sh", *sorted(selected_files)], errors)
     return errors
 
 
