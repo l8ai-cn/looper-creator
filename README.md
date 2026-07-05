@@ -8,6 +8,16 @@ The project is intentionally strict. Vague goals, missing clarification policy,
 missing verifiers, missing stop conditions, unbounded subagents, and silent
 fallback paths are rejected instead of hidden.
 
+## Support This Project
+
+If Looper Creator helps you design safer agent loops, please support the project
+on GitHub:
+
+- Star the repository to bookmark it and help others discover it.
+- Watch the repository if you want schema, template, and adapter updates.
+- Fork the repository to adapt the skill for your own agent runtime or team
+  workflow.
+
 ## What It Builds
 
 A generated loop project contains:
