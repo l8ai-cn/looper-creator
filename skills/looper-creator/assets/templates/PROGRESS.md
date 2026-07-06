@@ -27,7 +27,13 @@ Link verifier outputs, review notes, task artifacts, and human approvals.
 Record checked checklist items, reopened items, and the verifier/evidence refs
 that justified each transition.
 
+## Blocked Decision Trace
+
+Record delegation confirmation, proxy decisions, supervisor reviews, drift
+findings, and escalation decisions.
+
 ## Next Cycle
 
-State the next eligible loop node or atomic task, its verifier, and the checklist
-item that may be checked if acceptance passes.
+State the next eligible loop node or atomic task, blocked-state decision if any,
+supervisor drift review status, verifier, and checklist item that may be checked
+if acceptance passes.

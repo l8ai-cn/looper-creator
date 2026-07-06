@@ -26,6 +26,7 @@ A generated loop project contains:
 LOOP.md
 PROGRESS.md
 ACCEPTANCE.md
+DECISIONS.md
 loop.json
 loops.json
 tasks.json
@@ -34,6 +35,7 @@ context-policy.json
 state.json
 journal.jsonl
 runtime.json
+monitoring-plan.json
 scripts/verify.sh
 ADAPTERS.md
 AGENTS.md
@@ -52,6 +54,8 @@ The v2 manifest models:
 - multi-agent collaboration and subagent activation policy
 - execution adapters for Codex, Claude Code, Cursor, and portable runtimes
 - context/token budget strategy
+- blocked-state handling with user-confirmed proxy decisions and supervisor
+  drift monitoring
 - deterministic verification and anti-gaming rules
 - success, failure, budget, no-progress, human-gate, and escalation exits
 - common templates for feature development, testing/debugging, browser-based
@@ -136,6 +140,12 @@ Each manifest must define `acceptance_checklist`. Generated projects write it to
 time only after its acceptance criteria, verifier refs, and evidence refs are
 satisfied. If `state.json` reaches `complete`, `scripts/verify.sh` rejects any
 remaining unchecked item.
+
+Each manifest must also define `decision_policy`. Generated projects write
+blocked-state guidance to `DECISIONS.md` and cadence-based drift checks to
+`monitoring-plan.json`. A proxy decision agent may resolve only user-confirmed,
+low-risk blocked states; high-risk, irreversible, authority-unclear, or
+outward-facing actions still escalate to the user.
 
 The semantic validator also checks contracts that JSON Schema cannot express:
 `context_policy.durable_memory` must match `state`, every atomic task must have

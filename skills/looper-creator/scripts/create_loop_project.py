@@ -53,6 +53,10 @@ def _progress_path(manifest: dict[str, Any]) -> str:
     return manifest["state"]["progress_path"]
 
 
+def _decision_policy(manifest: dict[str, Any]) -> dict[str, Any]:
+    return manifest["decision_policy"]
+
+
 def _adapter_for_target(manifest: dict[str, Any], target: str) -> dict[str, Any]:
     for adapter in manifest["execution_adapters"]:
         if adapter.get("target") == target:
@@ -70,6 +74,9 @@ def render_loop_md(manifest: dict[str, Any]) -> str:
     termination = manifest["termination_policy"]
     verification = manifest["verification_policy"]
     checklist = manifest["acceptance_checklist"]
+    decision_policy = _decision_policy(manifest)
+    proxy = decision_policy["proxy_decision_agent"]
+    supervisor = decision_policy["supervisor_agent"]
     escalation = manifest["escalation"]
     gates = "\n".join(f"- {item}" for item in manifest["human_gates"]["irreversible_actions"]) or "- None"
     roots = "\n".join(f"- `{node['id']}`: {node['purpose']}" for node in manifest["loop_nodes"])
@@ -117,6 +124,14 @@ Split until:
 - Update policy: {checklist['update_policy']}
 
 {checklist_items}
+
+## Blocked Execution And Decision Policy
+
+- Decision file: `{decision_policy['blocked_state_path']}`
+- Decision log: `{decision_policy['decision_log_path']}`
+- Proxy decision agent: `{proxy['agent_id']}` with `{proxy['decision_authority']}` authority
+- Supervisor agent: `{supervisor['agent_id']}` every {supervisor['review_cadence_iterations']} iteration(s)
+- User confirmation: {decision_policy['user_confirmation']['prompt']}
 
 ## Agents
 
@@ -206,8 +221,92 @@ def render_acceptance_md(manifest: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def render_decisions_md(manifest: dict[str, Any]) -> str:
+    policy = _decision_policy(manifest)
+    confirmation = policy["user_confirmation"]
+    proxy = policy["proxy_decision_agent"]
+    supervisor = policy["supervisor_agent"]
+    blocked = policy["blocked_handling"]
+    return f"""# Blocked Execution Decisions
+
+Loop: {_manifest_name(manifest)}
+
+## User Confirmation
+
+- Required before delegation: {str(confirmation['required_before_delegation']).lower()}
+- Prompt: {confirmation['prompt']}
+- Confirmation record: `{confirmation['confirmation_record_path']}`
+
+## Proxy Decision Agent
+
+- Agent: `{proxy['agent_id']}`
+- Authority: `{proxy['decision_authority']}`
+- Default when uncertain: `{proxy['default_when_uncertain']}`
+
+Allowed decisions:
+
+{chr(10).join(f"- {item}" for item in proxy['allowed_decisions'])}
+
+Forbidden decisions:
+
+{chr(10).join(f"- {item}" for item in proxy['forbidden_decisions'])}
+
+Decision records must include:
+
+{chr(10).join(f"- `{item}`" for item in proxy['decision_record_fields'])}
+
+## Blocked Handling
+
+Blocked signals:
+
+{chr(10).join(f"- {item}" for item in blocked['blocked_signals'])}
+
+- Max blocked cycles: {blocked['max_blocked_cycles']}
+
+Allowed resolution actions:
+
+{chr(10).join(f"- {item}" for item in blocked['allowed_resolution_actions'])}
+
+Escalate when:
+
+{chr(10).join(f"- {item}" for item in blocked['escalation_required_when'])}
+
+## Supervisor
+
+- Agent: `{supervisor['agent_id']}`
+- Review cadence iterations: {supervisor['review_cadence_iterations']}
+- Report path: `{supervisor['report_path']}`
+
+Drift checks:
+
+{chr(10).join(f"- {item}" for item in supervisor['drift_checks'])}
+
+Intervention actions:
+
+{chr(10).join(f"- {item}" for item in supervisor['intervention_actions'])}
+"""
+
+
+def render_monitoring_plan_json(manifest: dict[str, Any]) -> str:
+    policy = _decision_policy(manifest)
+    monitoring = {
+        "schema_version": "1.0",
+        "loop_id": manifest["metadata"]["id"],
+        "supervisor_agent_id": policy["supervisor_agent"]["agent_id"],
+        "review_cadence_iterations": policy["supervisor_agent"]["review_cadence_iterations"],
+        "drift_checks": policy["supervisor_agent"]["drift_checks"],
+        "intervention_actions": policy["supervisor_agent"]["intervention_actions"],
+        "blocked_signals": policy["blocked_handling"]["blocked_signals"],
+        "max_blocked_cycles": policy["blocked_handling"]["max_blocked_cycles"],
+        "decision_file": policy["blocked_state_path"],
+        "decision_log": policy["decision_log_path"],
+    }
+    return _json(monitoring)
+
+
 def render_progress_md(manifest: dict[str, Any]) -> str:
     checklist_path = _checklist_path(manifest)
+    decision_policy = _decision_policy(manifest)
     return f"""# Progress
 
 Loop: {_manifest_name(manifest)}
@@ -235,13 +334,23 @@ Loop: {_manifest_name(manifest)}
 - Checked items: none
 - Reopened items: none
 
+## Blocked Decision Trace
+
+- Decision file: `{decision_policy['blocked_state_path']}`
+- Decision log: `{decision_policy['decision_log_path']}`
+- Delegation confirmed: pending
+- Last proxy decision: none
+- Last supervisor review: none
+
 ## Next Cycle
 
-1. Re-read `loop.json`, `state.json`, `tasks.json`, `agents.json`, `{checklist_path}`, and this file.
+1. Re-read `loop.json`, `state.json`, `tasks.json`, `agents.json`, `{checklist_path}`, `{decision_policy['blocked_state_path']}`, and this file.
 2. Evaluate `clarification_policy` before acting.
-3. Execute one eligible loop node or atomic task.
-4. Record evidence, then check exactly the matching acceptance item only if its criteria and verifier refs pass.
-5. Stop on success, failure, budget, no-progress, or human-gate conditions.
+3. If blocked, apply `decision_policy`: confirm delegation, use proxy decisions only within low-risk authority, and escalate otherwise.
+4. Run supervisor drift checks on the configured cadence before continuing.
+5. Execute one eligible loop node or atomic task.
+6. Record evidence, then check exactly the matching acceptance item only if its criteria and verifier refs pass.
+7. Stop on success, failure, budget, no-progress, or human-gate conditions.
 """
 
 
@@ -284,9 +393,13 @@ def render_verify_sh(manifest: dict[str, Any]) -> str:
         ]
     checklist_path = shlex.quote(_checklist_path(manifest))
     state_path = shlex.quote(manifest["state"]["path"])
+    decision_path = shlex.quote(_decision_policy(manifest)["blocked_state_path"])
+    monitoring_path = shlex.quote(_decision_policy(manifest)["supervisor_agent"]["report_path"])
     commands.extend(
         [
             f"test -s {checklist_path}",
+            f"test -s {decision_path}",
+            f"test -s {monitoring_path}",
             f"grep -Eq -- '- \\[[ xX]\\]' {checklist_path}",
             f"if grep -Eq '\"status\"[[:space:]]*:[[:space:]]*\"complete\"' {state_path}; then ! grep -Eq -- '- \\[ \\]' {checklist_path}; fi",
         ]
@@ -334,6 +447,7 @@ Platform selection query: {portability['platform_selection_query']}
 def render_codex_agents_md(manifest: dict[str, Any]) -> str:
     checklist_path = _checklist_path(manifest)
     progress_path = _progress_path(manifest)
+    decision_policy = _decision_policy(manifest)
     return f"""# AGENTS.md
 
 This file adapts `{manifest['metadata']['name']}` for Codex.
@@ -342,8 +456,9 @@ Canonical loop contract: `loop.json`
 
 ## Execution Rules
 
-- Re-read `loop.json`, `state.json`, `{progress_path}`, `{checklist_path}`, `tasks.json`, and `agents.json` before each loop cycle.
+- Re-read `loop.json`, `state.json`, `{progress_path}`, `{checklist_path}`, `{decision_policy['blocked_state_path']}`, `tasks.json`, and `agents.json` before each loop cycle.
 - Mark `{checklist_path}` items checked only after their criteria, verifier refs, and evidence refs are satisfied.
+- Use `decision_policy` when blocked: `{decision_policy['proxy_decision_agent']['agent_id']}` may decide only inside confirmed low-risk authority; `{decision_policy['supervisor_agent']['agent_id']}` must review goal drift on cadence.
 - Use subagents only when `collaboration_policy.subagent_activation.allowed_when` applies.
 - Do not weaken `verification_policy.protected_paths` or terminal verifier commands.
 - Stop and report when a requested capability is unsupported by Codex.
@@ -359,6 +474,7 @@ a stricter runtime-specific verifier.
 def render_claude_md(manifest: dict[str, Any]) -> str:
     checklist_path = _checklist_path(manifest)
     progress_path = _progress_path(manifest)
+    decision_policy = _decision_policy(manifest)
     return f"""# CLAUDE.md
 
 This file adapts `{manifest['metadata']['name']}` for Claude Code.
@@ -367,8 +483,9 @@ Canonical loop contract: `loop.json`
 
 ## Execution Rules
 
-- Load `loop.json`, `state.json`, `{progress_path}`, `{checklist_path}`, `tasks.json`, and `agents.json` before acting.
+- Load `loop.json`, `state.json`, `{progress_path}`, `{checklist_path}`, `{decision_policy['blocked_state_path']}`, `tasks.json`, and `agents.json` before acting.
 - Mark `{checklist_path}` items checked only after their criteria, verifier refs, and evidence refs are satisfied.
+- Apply `decision_policy` for blocked states; proxy decisions require prior user confirmation and cannot cross human gates.
 - Use Claude Code subagents only when the manifest's subagent activation policy applies.
 - Use hooks only to enforce or observe the manifest contract; do not use hooks to bypass verification.
 - Stop and ask the user before irreversible actions listed in `human_gates.irreversible_actions`.
@@ -398,6 +515,7 @@ def render_claude_settings_json() -> str:
 def render_cursor_rule(manifest: dict[str, Any]) -> str:
     checklist_path = _checklist_path(manifest)
     progress_path = _progress_path(manifest)
+    decision_policy = _decision_policy(manifest)
     return f"""---
 description: Looper Creator runtime adapter for {manifest['metadata']['name']}
 alwaysApply: false
@@ -407,8 +525,9 @@ alwaysApply: false
 
 Canonical loop contract: `loop.json`
 
-- Load `loop.json`, `state.json`, `{progress_path}`, `{checklist_path}`, `tasks.json`, and `agents.json` before each loop cycle.
+- Load `loop.json`, `state.json`, `{progress_path}`, `{checklist_path}`, `{decision_policy['blocked_state_path']}`, `tasks.json`, and `agents.json` before each loop cycle.
 - Mark `{checklist_path}` items checked only after their criteria, verifier refs, and evidence refs are satisfied.
+- Apply `decision_policy` for blocked states; proxy decisions require prior user confirmation and supervisor drift review.
 - Use Cursor subagents or cloud agents only when the manifest's activation policy applies.
 - Keep generated adapter files subordinate to `loop.json`.
 - Do not weaken verifiers for platform limits.
@@ -484,9 +603,14 @@ def create_project(manifest: dict[str, Any], output: Path, force: bool = False, 
     _write(output / "loop.json", _json(manifest))
     _write(output / "LOOP.md", render_loop_md(manifest))
     _write(output / _checklist_path(manifest), render_acceptance_md(manifest))
+    _write(output / _decision_policy(manifest)["blocked_state_path"], render_decisions_md(manifest))
+    _write(output / _decision_policy(manifest)["supervisor_agent"]["report_path"], render_monitoring_plan_json(manifest))
     _write(output / state["progress_path"], render_progress_md(manifest))
     _write(output / state["path"], render_state_json(manifest))
     _write(output / state["journal_path"], "")
+    decision_log_path = output / _decision_policy(manifest)["decision_log_path"]
+    if decision_log_path != output / state["journal_path"]:
+        _write(decision_log_path, "")
     _write(output / "loops.json", _json(manifest["loop_nodes"]))
     _write(output / "tasks.json", _json(manifest["atomic_tasks"]))
     _write(output / "agents.json", _json(manifest["agents"]))

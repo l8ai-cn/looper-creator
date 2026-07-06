@@ -19,6 +19,7 @@
     "termination_policy",
     "verification_policy",
     "cost_policy",
+    "decision_policy",
     "risk_policy",
     "execution_adapters",
     "portability_policy",
@@ -112,6 +113,7 @@
     "termination_policy": { "$ref": "#/$defs/termination_policy" },
     "verification_policy": { "$ref": "#/$defs/verification_policy" },
     "cost_policy": { "$ref": "#/$defs/cost_policy" },
+    "decision_policy": { "$ref": "#/$defs/decision_policy" },
     "risk_policy": { "$ref": "#/$defs/risk_policy" },
     "execution_adapters": {
       "type": "array",
@@ -382,6 +384,70 @@
           "additionalProperties": { "type": "integer", "minimum": 1 }
         },
         "stop_when_marginal_value_low": { "type": "boolean" }
+      }
+    },
+    "decision_policy": {
+      "type": "object",
+      "required": [
+        "blocked_state_path",
+        "decision_log_path",
+        "user_confirmation",
+        "proxy_decision_agent",
+        "supervisor_agent",
+        "blocked_handling"
+      ],
+      "properties": {
+        "blocked_state_path": { "$ref": "#/$defs/project_path" },
+        "decision_log_path": { "$ref": "#/$defs/project_path" },
+        "user_confirmation": {
+          "type": "object",
+          "required": ["required_before_delegation", "prompt", "confirmation_record_path"],
+          "properties": {
+            "required_before_delegation": { "const": true },
+            "prompt": { "$ref": "#/$defs/non_empty_string" },
+            "confirmation_record_path": { "$ref": "#/$defs/project_path" }
+          }
+        },
+        "proxy_decision_agent": {
+          "type": "object",
+          "required": [
+            "agent_id",
+            "decision_authority",
+            "allowed_decisions",
+            "forbidden_decisions",
+            "default_when_uncertain",
+            "decision_record_fields"
+          ],
+          "properties": {
+            "agent_id": { "$ref": "#/$defs/non_empty_string" },
+            "decision_authority": { "enum": ["recommend_only", "delegated_low_risk"] },
+            "allowed_decisions": { "$ref": "#/$defs/string_array" },
+            "forbidden_decisions": { "$ref": "#/$defs/string_array" },
+            "default_when_uncertain": { "enum": ["ask_user", "block_until_answer"] },
+            "decision_record_fields": { "$ref": "#/$defs/string_array" }
+          }
+        },
+        "supervisor_agent": {
+          "type": "object",
+          "required": ["agent_id", "review_cadence_iterations", "drift_checks", "intervention_actions", "report_path"],
+          "properties": {
+            "agent_id": { "$ref": "#/$defs/non_empty_string" },
+            "review_cadence_iterations": { "type": "integer", "minimum": 1 },
+            "drift_checks": { "$ref": "#/$defs/string_array" },
+            "intervention_actions": { "$ref": "#/$defs/string_array" },
+            "report_path": { "$ref": "#/$defs/project_path" }
+          }
+        },
+        "blocked_handling": {
+          "type": "object",
+          "required": ["blocked_signals", "max_blocked_cycles", "allowed_resolution_actions", "escalation_required_when"],
+          "properties": {
+            "blocked_signals": { "$ref": "#/$defs/string_array" },
+            "max_blocked_cycles": { "type": "integer", "minimum": 1 },
+            "allowed_resolution_actions": { "$ref": "#/$defs/string_array" },
+            "escalation_required_when": { "$ref": "#/$defs/string_array" }
+          }
+        }
       }
     },
     "risk_policy": {

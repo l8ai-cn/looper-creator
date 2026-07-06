@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "loop_id": "",
+  "supervisor_agent_id": "loop-supervisor",
+  "review_cadence_iterations": 2,
+  "drift_checks": [
+    "goal still matches objective.user_goal",
+    "active task maps to acceptance checklist"
+  ],
+  "intervention_actions": [
+    "pause and record drift",
+    "ask decision-proxy for low-risk correction",
+    "escalate to user"
+  ],
+  "blocked_signals": [
+    "same verifier fails twice",
+    "missing required context",
+    "ambiguous next action"
+  ],
+  "max_blocked_cycles": 2,
+  "decision_file": "DECISIONS.md",
+  "decision_log": "journal.jsonl"
+}

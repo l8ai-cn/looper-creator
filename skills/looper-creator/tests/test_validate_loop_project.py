@@ -125,6 +125,22 @@ def recursive_manifest():
                 "context_scope": "review_private",
                 "may_modify": ["review report"],
             },
+            {
+                "id": "decision-proxy",
+                "role": "decision_proxy",
+                "model_class": "strong_reasoning",
+                "responsibilities": ["resolve low-risk blocked states within delegated authority"],
+                "context_scope": "shared",
+                "may_modify": ["DECISIONS.md", "PROGRESS.md", "state.json"],
+            },
+            {
+                "id": "loop-supervisor",
+                "role": "supervisor",
+                "model_class": "strong_reasoning",
+                "responsibilities": ["monitor goal alignment", "detect drift", "request escalation"],
+                "context_scope": "shared",
+                "may_modify": ["monitoring-plan.json", "PROGRESS.md"],
+            },
         ],
         "collaboration_policy": {
             "patterns": ["orchestrator_workers", "evaluator_optimizer"],
@@ -192,8 +208,44 @@ def recursive_manifest():
         },
         "cost_policy": {
             "optimization_goal": "minimize repeated context loading while preserving verification evidence",
-            "token_budget_by_agent": {"orchestrator": 80000, "worker": 40000, "reviewer": 30000},
+            "token_budget_by_agent": {
+                "orchestrator": 80000,
+                "worker": 40000,
+                "reviewer": 30000,
+                "decision-proxy": 20000,
+                "loop-supervisor": 25000,
+            },
             "stop_when_marginal_value_low": True,
+        },
+        "decision_policy": {
+            "blocked_state_path": "DECISIONS.md",
+            "decision_log_path": "journal.jsonl",
+            "user_confirmation": {
+                "required_before_delegation": True,
+                "prompt": "May the decision-proxy resolve low-risk blocked states within the listed authority boundaries?",
+                "confirmation_record_path": "PROGRESS.md",
+            },
+            "proxy_decision_agent": {
+                "agent_id": "decision-proxy",
+                "decision_authority": "delegated_low_risk",
+                "allowed_decisions": ["choose next atomic task", "split task smaller", "retry verifier once"],
+                "forbidden_decisions": ["irreversible action", "production deploy", "credential change"],
+                "default_when_uncertain": "ask_user",
+                "decision_record_fields": ["blocked_reason", "options", "selected_option", "rationale", "evidence_ref"],
+            },
+            "supervisor_agent": {
+                "agent_id": "loop-supervisor",
+                "review_cadence_iterations": 2,
+                "drift_checks": ["goal still matches objective.user_goal", "active task maps to acceptance checklist"],
+                "intervention_actions": ["pause and record drift", "ask decision-proxy for low-risk correction", "escalate to user"],
+                "report_path": "monitoring-plan.json",
+            },
+            "blocked_handling": {
+                "blocked_signals": ["same verifier fails twice", "missing required context", "ambiguous next action"],
+                "max_blocked_cycles": 2,
+                "allowed_resolution_actions": ["ask secondary user query", "delegate low-risk decision", "split task smaller"],
+                "escalation_required_when": ["high-risk impact", "authority boundary unclear", "irreversible action required"],
+            },
         },
         "risk_policy": {
             "risk_levels": ["low", "medium", "high", "critical"],
@@ -306,6 +358,8 @@ class LooperCreatorValidationTests(unittest.TestCase):
             "ADAPTERS.md",
             "AGENTS.md",
             "runtime.json",
+            "DECISIONS.md",
+            "monitoring-plan.json",
             "scripts/verify.sh",
         ]:
             self.assertTrue((output / relative).exists(), relative)
@@ -317,6 +371,9 @@ class LooperCreatorValidationTests(unittest.TestCase):
             self.assertFalse((output / relative).exists(), relative)
         verifier_script = (output / "scripts" / "verify.sh").read_text(encoding="utf-8")
         self.assertNotIn("python3 -m unittest discover -s tests", verifier_script)
+        adapter_text = (output / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("decision_policy", adapter_text)
+        self.assertIn("decision-proxy", adapter_text)
 
     def test_generated_project_can_select_claude_runtime_adapter(self):
         manifest = recursive_manifest()
@@ -379,6 +436,26 @@ class LooperCreatorValidationTests(unittest.TestCase):
         errors = validate_manifest(manifest)
         self.assertTrue(any("acceptance_checklist" in error for error in errors))
 
+    def test_v2_requires_decision_policy(self):
+        manifest = recursive_manifest()
+        del manifest["decision_policy"]
+        errors = validate_manifest(manifest)
+        self.assertTrue(any("decision_policy" in error for error in errors))
+
+    def test_v2_rejects_decision_policy_unknown_agent(self):
+        manifest = recursive_manifest()
+        manifest["decision_policy"]["proxy_decision_agent"]["agent_id"] = "missing-agent"
+        manifest["decision_policy"]["supervisor_agent"]["agent_id"] = "missing-agent"
+        errors = validate_manifest(manifest)
+        self.assertTrue(any("proxy_decision_agent.agent_id must reference an agent id" in error for error in errors))
+        self.assertTrue(any("supervisor_agent.agent_id must reference an agent id" in error for error in errors))
+
+    def test_v2_rejects_decision_proxy_that_can_bypass_human_gates(self):
+        manifest = recursive_manifest()
+        manifest["decision_policy"]["proxy_decision_agent"]["allowed_decisions"].append("approve production deploy")
+        errors = validate_manifest(manifest)
+        self.assertTrue(any("proxy_decision_agent.allowed_decisions must not include irreversible or high-risk actions" in error for error in errors))
+
     def test_v2_rejects_acceptance_checklist_path_traversal(self):
         manifest = recursive_manifest()
         manifest["acceptance_checklist"]["path"] = "../ACCEPTANCE.md"
@@ -423,6 +500,8 @@ class LooperCreatorValidationTests(unittest.TestCase):
         self.assertEqual([], validate_project(output))
         self.assertTrue((output / "run" / "PROGRESS.md").exists())
         self.assertTrue((output / "run" / "ACCEPTANCE.md").exists())
+        self.assertTrue((output / "DECISIONS.md").exists())
+        self.assertTrue((output / "monitoring-plan.json").exists())
         self.assertFalse((output / "PROGRESS.md").exists())
         self.assertFalse((output / "ACCEPTANCE.md").exists())
         adapter_text = (output / "AGENTS.md").read_text(encoding="utf-8")

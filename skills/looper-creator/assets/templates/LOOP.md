@@ -41,6 +41,12 @@ evidence refs are satisfied.
 Define orchestrator, worker, reviewer, verifier, and domain specialist roles only
 when they are needed by the loop.
 
+## Blocked Execution And Decision Policy
+
+Define user confirmation, proxy decision authority, blocked signals, allowed
+low-risk resolution actions, supervisor cadence, drift checks, and escalation
+boundaries. Proxy decisions must be recorded in `DECISIONS.md`.
+
 ## Context Strategy
 
 Define required context, retrieval strategy, trimming policy, compaction threshold,

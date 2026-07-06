@@ -4,13 +4,20 @@ Use this catalog to choose the nearest starting template before writing a
 manifest. Each template still needs task-specific objective, context, verifier,
 budget, and human-gate values.
 
-Every template should also select runtime adapters. Keep `loop.json` canonical
-and generate platform files from `execution_adapters`; do not edit adapter files
-as the source of truth.
+Every template should also declare runtime adapters. Keep `loop.json` canonical,
+record the selected generated runtime in `runtime.json`, and generate only the
+selected platform files at the project root; do not edit adapter files as the
+source of truth.
 
 Every template must include `acceptance_checklist` and generate `ACCEPTANCE.md`.
 Use one checkbox per atomic task, bind each item to an owner agent, verifier
 refs, and durable evidence refs, and check items only after the evidence exists.
+
+Every template must include `decision_policy` and generate `DECISIONS.md` plus
+`monitoring-plan.json`. Add a proxy decision agent for user-confirmed low-risk
+blocked states and a supervisor agent for cadence-based goal-drift checks.
+Proxy decisions must never approve irreversible, production, credential, billing,
+security, merge, push, or deployment actions.
 
 ## feature-development
 
@@ -107,6 +114,11 @@ and stop on machine-checkable completion or explicit escalation.
   settings.
 - Use `cursor` when the loop should emit Cursor rules.
 - Use `portable` when no platform-specific execution surface is known yet.
+
+Scaffolding defaults to `--runtime-target codex`. Generate Claude Code or Cursor
+root adapter files only when explicitly requested. Unselected runtime adapters
+should remain declared in `loop.json`/`ADAPTERS.md`, not mixed into the generated
+project root.
 
 If the selected runtime lacks a capability, keep the manifest invalid or blocked
 until the user chooses an explicit alternative. Do not design silent fallback.

@@ -20,6 +20,8 @@ valid project uses `RecursiveLoopOrchestration` schema v2.0 and must define:
 - execution adapters for Codex, Claude Code, Cursor, and portable runtimes;
 - context and token policy for retrieval, trimming, compaction, and durable
   memory;
+- decision policy for blocked execution, user-confirmed proxy decisions, and
+  supervisor drift monitoring;
 - deterministic verification, protected verifier paths, and anti-gaming rules;
 - browser evidence review rules when a website-testing loop is requested:
   raw findings must be deduplicated, token/JWT evidence must be scrubbed, and
@@ -56,6 +58,9 @@ a blocked loop, not a valid loop.
    - Keep each checklist task item aligned with its atomic task: criteria,
      verifier refs, and evidence refs must include the task's criteria,
      verifier refs, and output artifacts.
+   - Define `decision_policy` so blocked states have user confirmation,
+     low-risk proxy decision authority, supervisor drift checks, and escalation
+     boundaries.
 
 4. **Validate before generation**
    - Run:
@@ -78,10 +83,12 @@ a blocked loop, not a valid loop.
      ```bash
      python3 skills/looper-creator/scripts/validate_loop_project.py path/to/output-loop-project
      ```
-   - A valid project contains `LOOP.md`, `PROGRESS.md`, `ACCEPTANCE.md`, `loop.json`,
+   - A valid project contains `LOOP.md`, `PROGRESS.md`, `ACCEPTANCE.md`,
+     `DECISIONS.md`, `loop.json`,
      `loops.json`, `tasks.json`, `agents.json`, `context-policy.json`,
-     `state.json`, `journal.jsonl`, `runtime.json`, `ADAPTERS.md`, the selected
-     runtime adapter files, and `scripts/verify.sh`.
+     `state.json`, `journal.jsonl`, `runtime.json`, `monitoring-plan.json`,
+     `ADAPTERS.md`, the selected runtime adapter files, and
+     `scripts/verify.sh`.
 
 ## Design Rules
 
@@ -110,6 +117,13 @@ a blocked loop, not a valid loop.
   atomic task is accepted; reopen it if later verification invalidates the
   evidence. Terminal success requires all items checked and the terminal
   verifier passing.
+- Treat `DECISIONS.md` as the blocked-state decision ledger. A proxy decision
+  agent may act only after user delegation is recorded and only within
+  `delegated_low_risk` authority. It must ask the user when uncertain and cannot
+  bypass human gates.
+- Require a supervisor agent to run cadence-based drift checks from
+  `monitoring-plan.json`, pause or correct low-risk drift, and escalate when the
+  task no longer maps to the original goal or acceptance checklist.
 - Do not let context files drift. `state.path`, `state.progress_path`, and
   `state.journal_path` are the durable memory paths, and
   `context_policy.durable_memory` must point to the same files.
@@ -157,6 +171,8 @@ Before finishing a Looper Creator task, verify:
 - Required files exist at the generated path.
 - `ACCEPTANCE.md` exists, contains one item per atomic task, and each checked
   item has verifier-backed evidence.
+- `DECISIONS.md` and `monitoring-plan.json` exist; proxy decisions are
+  user-confirmed, low-risk, recorded, and supervised for goal drift.
 - The verifier script is executable.
 - Any real-world verifier that depends on external systems is either run and
   reported, or explicitly listed as unavailable.

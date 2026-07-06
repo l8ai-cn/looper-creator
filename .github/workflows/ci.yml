@@ -36,6 +36,17 @@ jobs:
             --output /tmp/example-loop
           python3 skills/looper-creator/scripts/validate_loop_project.py /tmp/example-loop
           (cd /tmp/example-loop && bash scripts/verify.sh)
+      - name: Generate Claude runtime sample
+        run: |
+          python3 skills/looper-creator/scripts/create_loop_project.py \
+            --manifest skills/looper-creator/examples/feature-development.loop.json \
+            --output /tmp/claude-loop \
+            --runtime-target claude_code
+          python3 skills/looper-creator/scripts/validate_loop_project.py /tmp/claude-loop
+          test -f /tmp/claude-loop/CLAUDE.md
+          test -f /tmp/claude-loop/.claude/settings.json
+          test ! -e /tmp/claude-loop/AGENTS.md
+          ! grep -R "|| true" /tmp/claude-loop
       - name: Generate website testing sample
         run: |
           python3 skills/looper-creator/scripts/create_loop_project.py \

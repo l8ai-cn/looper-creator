@@ -22,5 +22,21 @@
     "responsibilities": ["review output against acceptance criteria"],
     "context_scope": "review_private",
     "may_modify": ["review report", "ACCEPTANCE.md"]
+  },
+  {
+    "id": "decision-proxy",
+    "role": "decision_proxy",
+    "model_class": "strong_reasoning",
+    "responsibilities": ["resolve low-risk blocked states within delegated authority"],
+    "context_scope": "shared",
+    "may_modify": ["DECISIONS.md", "PROGRESS.md", "state.json"]
+  },
+  {
+    "id": "loop-supervisor",
+    "role": "supervisor",
+    "model_class": "strong_reasoning",
+    "responsibilities": ["monitor goal alignment", "detect drift", "request escalation"],
+    "context_scope": "shared",
+    "may_modify": ["monitoring-plan.json", "PROGRESS.md"]
   }
 ]

@@ -324,6 +324,35 @@
         "bug-list.md",
         "PROGRESS.md"
       ]
+    },
+    {
+      "id": "decision-proxy",
+      "role": "decision_proxy",
+      "model_class": "strong_reasoning",
+      "responsibilities": [
+        "resolve low-risk blocked states within delegated authority"
+      ],
+      "context_scope": "shared",
+      "may_modify": [
+        "DECISIONS.md",
+        "PROGRESS.md",
+        "state.json"
+      ]
+    },
+    {
+      "id": "loop-supervisor",
+      "role": "supervisor",
+      "model_class": "strong_reasoning",
+      "responsibilities": [
+        "monitor goal alignment",
+        "detect drift",
+        "request escalation"
+      ],
+      "context_scope": "shared",
+      "may_modify": [
+        "monitoring-plan.json",
+        "PROGRESS.md"
+      ]
     }
   ],
   "collaboration_policy": {
@@ -466,7 +495,9 @@
     "token_budget_by_agent": {
       "orchestrator": 24000,
       "browser_worker": 42000,
-      "defect_reviewer": 24000
+      "defect_reviewer": 24000,
+      "decision-proxy": 20000,
+      "loop-supervisor": 25000
     }
   },
   "risk_policy": {
@@ -682,5 +713,68 @@
         ]
       }
     ]
+  },
+  "decision_policy": {
+    "blocked_state_path": "DECISIONS.md",
+    "decision_log_path": "journal.jsonl",
+    "user_confirmation": {
+      "required_before_delegation": true,
+      "prompt": "May the decision-proxy resolve low-risk blocked states within the listed authority boundaries?",
+      "confirmation_record_path": "PROGRESS.md"
+    },
+    "proxy_decision_agent": {
+      "agent_id": "decision-proxy",
+      "decision_authority": "delegated_low_risk",
+      "allowed_decisions": [
+        "choose next atomic task",
+        "split task smaller",
+        "retry verifier once"
+      ],
+      "forbidden_decisions": [
+        "irreversible action",
+        "production deploy",
+        "credential change"
+      ],
+      "default_when_uncertain": "ask_user",
+      "decision_record_fields": [
+        "blocked_reason",
+        "options",
+        "selected_option",
+        "rationale",
+        "evidence_ref"
+      ]
+    },
+    "supervisor_agent": {
+      "agent_id": "loop-supervisor",
+      "review_cadence_iterations": 2,
+      "drift_checks": [
+        "goal still matches objective.user_goal",
+        "active task maps to acceptance checklist"
+      ],
+      "intervention_actions": [
+        "pause and record drift",
+        "ask decision-proxy for low-risk correction",
+        "escalate to user"
+      ],
+      "report_path": "monitoring-plan.json"
+    },
+    "blocked_handling": {
+      "blocked_signals": [
+        "same verifier fails twice",
+        "missing required context",
+        "ambiguous next action"
+      ],
+      "max_blocked_cycles": 2,
+      "allowed_resolution_actions": [
+        "ask secondary user query",
+        "delegate low-risk decision",
+        "split task smaller"
+      ],
+      "escalation_required_when": [
+        "high-risk impact",
+        "authority boundary unclear",
+        "irreversible action required"
+      ]
+    }
   }
 }

@@ -26,6 +26,18 @@ CLARIFICATION_ACTIONS = {"ask_user", "make_low_risk_assumption", "generate_optio
 ADAPTER_TARGETS = {"codex", "claude_code", "cursor", "portable"}
 UNSUPPORTED_CAPABILITY_BEHAVIOR = "block_and_report"
 UNSAFE_COMMAND_FRAGMENTS = ("|| true", "continue-on-error", "set +e")
+HIGH_RISK_DECISION_TERMS = (
+    "irreversible",
+    "production",
+    "deploy",
+    "delete",
+    "merge",
+    "push",
+    "credential",
+    "billing",
+    "payment",
+    "security",
+)
 FORBIDDEN_SECRET_KEYS = {
     "password",
     "passwd",
@@ -51,6 +63,7 @@ REQUIRED_TOP_LEVEL = {
     "termination_policy",
     "verification_policy",
     "cost_policy",
+    "decision_policy",
     "risk_policy",
     "execution_adapters",
     "portability_policy",
@@ -413,6 +426,80 @@ def _validate_cost_policy(manifest: dict[str, Any], errors: list[str], agent_ids
     _require(isinstance(policy.get("stop_when_marginal_value_low"), bool), "cost_policy.stop_when_marginal_value_low must be boolean", errors)
 
 
+def _validate_decision_policy(manifest: dict[str, Any], errors: list[str], agent_ids: set[str]) -> None:
+    policy = _as_dict(manifest.get("decision_policy"), "decision_policy", errors)
+    _validate_project_path(policy.get("blocked_state_path"), "decision_policy.blocked_state_path", errors)
+    _validate_project_path(policy.get("decision_log_path"), "decision_policy.decision_log_path", errors)
+
+    confirmation = _as_dict(policy.get("user_confirmation"), "decision_policy.user_confirmation", errors)
+    _require(
+        confirmation.get("required_before_delegation") is True,
+        "decision_policy.user_confirmation.required_before_delegation must be true",
+        errors,
+    )
+    _require(_non_empty_string(confirmation.get("prompt")), "decision_policy.user_confirmation.prompt must be non-empty", errors)
+    _validate_project_path(
+        confirmation.get("confirmation_record_path"),
+        "decision_policy.user_confirmation.confirmation_record_path",
+        errors,
+    )
+
+    proxy = _as_dict(policy.get("proxy_decision_agent"), "decision_policy.proxy_decision_agent", errors)
+    proxy_agent_id = proxy.get("agent_id")
+    _require(_non_empty_string(proxy_agent_id), "decision_policy.proxy_decision_agent.agent_id must be non-empty", errors)
+    if _non_empty_string(proxy_agent_id):
+        _require(proxy_agent_id in agent_ids, "decision_policy.proxy_decision_agent.agent_id must reference an agent id", errors)
+    _require(
+        proxy.get("decision_authority") in {"recommend_only", "delegated_low_risk"},
+        "decision_policy.proxy_decision_agent.decision_authority must be recommend_only or delegated_low_risk",
+        errors,
+    )
+    allowed = _string_list(proxy.get("allowed_decisions"), "decision_policy.proxy_decision_agent.allowed_decisions", errors)
+    forbidden = _string_list(proxy.get("forbidden_decisions"), "decision_policy.proxy_decision_agent.forbidden_decisions", errors)
+    _require(
+        proxy.get("default_when_uncertain") in {"ask_user", "block_until_answer"},
+        "decision_policy.proxy_decision_agent.default_when_uncertain must be ask_user or block_until_answer",
+        errors,
+    )
+    _string_list(proxy.get("decision_record_fields"), "decision_policy.proxy_decision_agent.decision_record_fields", errors)
+    for decision in allowed:
+        lowered = decision.lower()
+        _require(
+            not any(term in lowered for term in HIGH_RISK_DECISION_TERMS),
+            "decision_policy.proxy_decision_agent.allowed_decisions must not include irreversible or high-risk actions",
+            errors,
+        )
+    _require(
+        any("irreversible" in item.lower() for item in forbidden),
+        "decision_policy.proxy_decision_agent.forbidden_decisions must forbid irreversible actions",
+        errors,
+    )
+
+    supervisor = _as_dict(policy.get("supervisor_agent"), "decision_policy.supervisor_agent", errors)
+    supervisor_agent_id = supervisor.get("agent_id")
+    _require(_non_empty_string(supervisor_agent_id), "decision_policy.supervisor_agent.agent_id must be non-empty", errors)
+    if _non_empty_string(supervisor_agent_id):
+        _require(supervisor_agent_id in agent_ids, "decision_policy.supervisor_agent.agent_id must reference an agent id", errors)
+    _require(
+        _positive_int(supervisor.get("review_cadence_iterations")),
+        "decision_policy.supervisor_agent.review_cadence_iterations must be a positive integer",
+        errors,
+    )
+    _string_list(supervisor.get("drift_checks"), "decision_policy.supervisor_agent.drift_checks", errors)
+    _string_list(supervisor.get("intervention_actions"), "decision_policy.supervisor_agent.intervention_actions", errors)
+    _validate_project_path(supervisor.get("report_path"), "decision_policy.supervisor_agent.report_path", errors)
+
+    blocked = _as_dict(policy.get("blocked_handling"), "decision_policy.blocked_handling", errors)
+    _string_list(blocked.get("blocked_signals"), "decision_policy.blocked_handling.blocked_signals", errors)
+    _require(
+        _positive_int(blocked.get("max_blocked_cycles")),
+        "decision_policy.blocked_handling.max_blocked_cycles must be a positive integer",
+        errors,
+    )
+    _string_list(blocked.get("allowed_resolution_actions"), "decision_policy.blocked_handling.allowed_resolution_actions", errors)
+    _string_list(blocked.get("escalation_required_when"), "decision_policy.blocked_handling.escalation_required_when", errors)
+
+
 def _validate_risk_policy(manifest: dict[str, Any], errors: list[str]) -> None:
     policy = _as_dict(manifest.get("risk_policy"), "risk_policy", errors)
     _string_list(policy.get("risk_levels"), "risk_policy.risk_levels", errors)
@@ -523,6 +610,7 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
     _validate_context_policy(manifest, errors)
     _validate_termination_policy(manifest, errors)
     _validate_cost_policy(manifest, errors, agent_ids)
+    _validate_decision_policy(manifest, errors, agent_ids)
     _validate_risk_policy(manifest, errors)
     _validate_execution_adapters(manifest, errors)
     _validate_portability_policy(manifest, errors)
@@ -613,6 +701,14 @@ def validate_project(path: Path) -> list[str]:
     checklist = manifest.get("acceptance_checklist", {}) if isinstance(manifest.get("acceptance_checklist"), dict) else {}
     if isinstance(checklist.get("path"), str):
         required_files.append(checklist["path"])
+    decision_policy = manifest.get("decision_policy", {}) if isinstance(manifest.get("decision_policy"), dict) else {}
+    if isinstance(decision_policy.get("blocked_state_path"), str):
+        required_files.append(decision_policy["blocked_state_path"])
+    if isinstance(decision_policy.get("decision_log_path"), str):
+        required_files.append(decision_policy["decision_log_path"])
+    supervisor = decision_policy.get("supervisor_agent", {}) if isinstance(decision_policy.get("supervisor_agent"), dict) else {}
+    if isinstance(supervisor.get("report_path"), str):
+        required_files.append(supervisor["report_path"])
     for relative in required_files:
         if isinstance(relative, str):
             _require((path / relative).exists(), f"missing generated file: {relative}", errors)
