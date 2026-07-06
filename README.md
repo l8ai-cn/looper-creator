@@ -8,6 +8,12 @@ The project is intentionally strict. Vague goals, missing clarification policy,
 missing verifiers, missing stop conditions, unbounded subagents, and silent
 fallback paths are rejected instead of hidden.
 
+## Learning Resources
+
+See [Awesome Loop Engineering](AWESOME-LOOP-ENGINEERING.md) for bilingual
+courses, primary references, GitHub projects, and the sources that shaped
+Looper Creator.
+
 ## Support This Project
 
 If Looper Creator helps you design safer agent loops, please support the project
