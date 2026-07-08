@@ -39,8 +39,8 @@ courses, primary references, GitHub projects, and the sources that shaped
 Looper Creator.
 
 It includes existing Awesome lists, Anthropic/OpenAI/LangGraph references,
-Andrew Ng and DeepLearning.AI courses, GitHub projects, runtime standards, and a
-source-to-schema mapping for Looper Creator.
+Claude loop progression guidance, Andrew Ng and DeepLearning.AI courses, GitHub
+projects, runtime standards, and a source-to-schema mapping for Looper Creator.
 
 ## Support This Project
 
@@ -261,7 +261,7 @@ Orchestration** 项目。它面向自主或半自主 Agent 执行场景，把一
 学习地图和参考来源账本，包含：
 
 - 已有 Awesome Loop Engineering / Agent Loop 列表
-- Anthropic、OpenAI、LangGraph 等官方或一手资料
+- Anthropic、Claude、OpenAI、LangGraph 等官方或一手资料
 - Andrew Ng、DeepLearning.AI、LangChain Academy、Hugging Face 的课程
 - LangGraph、AutoGen、CrewAI、Semantic Kernel 等 GitHub 项目
 - Looper Creator 如何把这些知识落实到 schema、模板、门禁和运行时适配中

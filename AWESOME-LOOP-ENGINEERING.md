@@ -90,6 +90,12 @@ curate selectively rather than collecting everything.
     parallelization, orchestrator-worker, and evaluator-optimizer patterns.
   - 中文：对 workflow 与 agent 的边界、编排模式和 evaluator-optimizer loop
     很有参考价值。
+- [Claude by Anthropic - Getting started with loops](https://claude.com/blog/getting-started-with-loops)
+  - Practical progression from turn-based loops to goal-based, time-based, and
+    proactive loops, with guidance on stop criteria, pilot runs, code review,
+    deterministic scripts, and usage accounting.
+  - 中文：把 loop 从“每轮用户驱动”推进到“目标驱动、时间驱动、主动例行任务”，
+    对 Looper Creator 的 loop primitive 选择、pilot 门禁和 token 使用审计有直接参考价值。
 - [OpenAI - A Practical Guide to Building Agents](https://openai.com/business/guides-and-resources/a-practical-guide-to-building-ai-agents/)
   - Covers agent design, orchestration, model choice, tools, guardrails, and
     multi-agent patterns.
@@ -193,6 +199,7 @@ curate selectively rather than collecting everything.
 | Idea / 思想 | Source / 来源 | Looper Creator implementation / 落地方式 |
 | --- | --- | --- |
 | Workflows vs. agents / workflow 与 agent 边界 | Anthropic Building Effective Agents | `loop_nodes` distinguish workflow, agent loop, reflection loop, evaluator-optimizer loop, parallel section, handoff loop, and human gate. |
+| Loop primitive progression / loop 原语递进 | Claude Getting started with loops | Template selection now distinguishes turn-based, goal-based, time-based, and proactive loops, and requires pilots plus usage review before widening proactive or dynamic workflows. |
 | Agentic design patterns / agentic 设计模式 | Andrew Ng / DeepLearning.AI | `decomposition_policy`, `collaboration_policy`, reviewer/reflection tasks, and multi-agent activation. |
 | Durable state / 持久状态 | LangGraph | `state.json`, `journal.jsonl`, `PROGRESS.md`, generated evidence paths, and context reload rules. |
 | Human-in-the-loop / 人工确认 | LangGraph HITL, OpenAI Agents SDK, GitHub Agentic Workflows | `human_gates`, `decision_policy.user_confirmation`, `proxy_decision_agent.default_when_uncertain`, irreversible action gates. |

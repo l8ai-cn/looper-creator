@@ -11,6 +11,8 @@ Use this skill to create a concrete loop project, not merely describe one. A
 valid project uses `RecursiveLoopOrchestration` schema v2.0 and must define:
 
 - recursive loop nodes, not a fixed one-level macro/micro loop;
+- an explicit loop primitive: turn-based, goal-based, time-based, or proactive,
+  encoded through trigger, stop, budget, verification, and human-gate policy;
 - atomic tasks with owners, dependencies, outputs, acceptance criteria, and
   verifier references;
 - an acceptance checklist with one traceable item per atomic task, checked only
@@ -41,13 +43,26 @@ a blocked loop, not a valid loop.
      synthesis, or generic task execution.
    - Start from a matching file in `examples/` when available.
 
-2. **Clarify before scaffolding**
+2. **Select the smallest loop primitive**
+   - Use a turn-based loop when the user will stay in the loop and hand off only
+     the verification check.
+   - Use a goal-based loop when completion is known up front and can be encoded
+     as a machine-checkable stop condition.
+   - Use a time-based loop when work arrives on a schedule; match the interval to
+     how often the observed source actually changes.
+   - Use a proactive loop only for recurring, well-defined work with bounded
+     per-run goals, pilot evidence, usage review, and human gates.
+   - Record the selected primitive in loop node purpose, entry conditions, exit
+     conditions, templates, and budget/termination policy. Do not use a larger
+     primitive when a smaller one handles the task.
+
+3. **Clarify before scaffolding**
    - Apply `clarification_policy` before generating files.
    - Ask a secondary user query when goal, acceptance criteria, verification,
      permissions, data impact, production impact, or delivery target is unclear.
    - Make only low-risk assumptions and record them in `PROGRESS.md`.
 
-3. **Write or adapt the manifest**
+4. **Write or adapt the manifest**
    - Use `schemas/loop-manifest.schema.json` as the public contract.
    - Keep secrets out of the manifest. Use references, not plaintext credentials.
    - Split work recursively through `loop_nodes`; split executable work through
@@ -62,7 +77,7 @@ a blocked loop, not a valid loop.
      low-risk proxy decision authority, supervisor drift checks, and escalation
      boundaries.
 
-4. **Validate before generation**
+5. **Validate before generation**
    - Run:
      ```bash
      python3 skills/looper-creator/scripts/validate_loop_project.py path/to/loop.json
@@ -70,7 +85,7 @@ a blocked loop, not a valid loop.
    - Fix root causes. Do not add compatibility branches to make invalid loop
      designs pass.
 
-5. **Generate the project skeleton**
+6. **Generate the project skeleton**
    - Run:
      ```bash
      python3 skills/looper-creator/scripts/create_loop_project.py \
@@ -78,7 +93,7 @@ a blocked loop, not a valid loop.
        --output path/to/output-loop-project
      ```
 
-6. **Validate generated output**
+7. **Validate generated output**
    - Run:
      ```bash
      python3 skills/looper-creator/scripts/validate_loop_project.py path/to/output-loop-project
@@ -95,6 +110,10 @@ a blocked loop, not a valid loop.
 - Represent task decomposition as a recursive graph of loop nodes. A node may be
   a workflow, agent loop, reflection loop, evaluator-optimizer loop, parallel
   section, handoff loop, or human review gate.
+- Choose the smallest Claude-style loop primitive that fits the task: turn-based
+  hands off verification, goal-based hands off the stop condition, time-based
+  hands off the trigger, and proactive hands off the recurring prompt/routine.
+  Larger primitives require stronger budget, review, and human-gate controls.
 - Treat `loop.json` as the canonical manifest. `runtime.json` records the
   selected runtime adapter for a generated project. Platform files such as
   `AGENTS.md`, `CLAUDE.md`, and `.cursor/rules/looper-creator.mdc` are generated
@@ -134,6 +153,16 @@ a blocked loop, not a valid loop.
   headers, `access_token` values, and JWT-shaped strings.
 - Use deterministic verifiers for per-task, per-loop, and terminal checks. The
   agent's own completion statement is not evidence.
+- Pilot any proactive, scheduled, or dynamic multi-agent workflow on a small
+  slice before a large run. Record pilot scope, observed stalls, token usage,
+  verifier results, and template improvements before widening the loop.
+- Prefer scripts for deterministic work that would otherwise be repeatedly
+  reasoned through. A script, validator, or hook is cheaper and more stable than
+  asking an agent to re-derive the same procedure every iteration.
+- Review runtime usage evidence when the target exposes it. For Claude Code
+  loops, use `/usage`, `/goal`, and `/workflows` when available; for other
+  runtimes, record equivalent token, turn, subagent, and tool-call counts in
+  `journal.jsonl` or `PROGRESS.md`.
 - Stop on no progress by comparing manifest-defined fingerprints, not by asking
   the agent whether it feels stuck.
 - Gate irreversible or outward-facing operations such as push, merge, deployment,
@@ -156,7 +185,10 @@ a blocked loop, not a valid loop.
 - `codex`: generate `AGENTS.md`; subagents are explicit and must respect the
   active sandbox and approval policy.
 - `claude_code`: generate `CLAUDE.md` and optional `.claude/settings.json`;
-  hooks may enforce checks, but must not bypass verification.
+  hooks may enforce checks, but must not bypass verification. When using
+  Claude-native loops, map turn-based, goal-based, time-based, and proactive
+  behavior to explicit manifest triggers and stop conditions instead of relying
+  on chat history or implicit `/goal` state.
 - `cursor`: generate `.cursor/rules/looper-creator.mdc`; rules and subagents
   must remain subordinate to `loop.json`.
 - `portable`: generate generic project artifacts when no platform-specific
@@ -169,6 +201,8 @@ Before finishing a Looper Creator task, verify:
 - The manifest validates.
 - The generated project validates.
 - Required files exist at the generated path.
+- The selected loop primitive is explicit, minimal for the task, and backed by
+  trigger, stop, budget, usage-review, and human-gate controls.
 - `ACCEPTANCE.md` exists, contains one item per atomic task, and each checked
   item has verifier-backed evidence.
 - `DECISIONS.md` and `monitoring-plan.json` exist; proxy decisions are

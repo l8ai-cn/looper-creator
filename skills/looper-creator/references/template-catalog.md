@@ -19,6 +19,27 @@ blocked states and a supervisor agent for cadence-based goal-drift checks.
 Proxy decisions must never approve irreversible, production, credential, billing,
 security, merge, push, or deployment actions.
 
+## Loop Primitive Selection
+
+Choose the smallest loop primitive before choosing a domain template:
+
+- **turn-based**: user triggers each run and hands off verification. Use for
+  exploratory, one-off, or still-ambiguous work. Optimize by encoding the user's
+  manual checks into a skill or verifier.
+- **goal-based**: user hands off the stop condition. Use when done is known and
+  machine-checkable. Require explicit success, failure, budget, no-progress, and
+  human-gate exits.
+- **time-based**: user hands off the trigger. Use when the observed source
+  changes on a schedule. Match cadence to source change frequency and add rate
+  limits/backpressure.
+- **proactive**: user hands off a recurring prompt/routine. Use only for
+  recurring, well-defined work with bounded per-run goals, pilot evidence,
+  usage review, supervisor checks, and human gates.
+
+If a smaller primitive can complete the work, do not promote it to a larger one.
+Dynamic workflows that may spawn many agents must run a small pilot before the
+full loop is allowed.
+
 ## feature-development
 
 Use for one scoped software feature. Start with clarification, decompose into
