@@ -177,6 +177,14 @@ curate selectively rather than collecting everything.
 - [Azure-Samples/semantic-kernel-workshop](https://github.com/Azure-Samples/semantic-kernel-workshop)
   - Workshop notebooks for Semantic Kernel, agents, and process workflows.
   - 中文：适合课程式学习 enterprise workflow 与 agent orchestration。
+- [GodModeAI2025/LoopCreatorSkill](https://github.com/GodModeAI2025/LoopCreatorSkill)
+  and [landing page](https://godmodeai2025.github.io/LoopCreatorSkill/)
+  - A German loop-creator skill focused on deciding whether a loop is worthwhile,
+    building concise reusable prompts, auditing loops as a loop doctor, autonomy
+    maturity levels, and project-local `LOOPS.md` reuse.
+  - 中文：一个德语 Loop Creator Skill 项目，值得参考其“先判断是否值得做
+    Loop”、自治成熟度阶梯、独立验收实例、Loop Doctor 和项目内 `LOOPS.md`
+    复用库设计。
 
 ## Runtime and Instruction Standards / 运行时与指令标准
 
@@ -200,6 +208,7 @@ curate selectively rather than collecting everything.
 | --- | --- | --- |
 | Workflows vs. agents / workflow 与 agent 边界 | Anthropic Building Effective Agents | `loop_nodes` distinguish workflow, agent loop, reflection loop, evaluator-optimizer loop, parallel section, handoff loop, and human gate. |
 | Loop primitive progression / loop 原语递进 | Claude Getting started with loops | Template selection now distinguishes turn-based, goal-based, time-based, and proactive loops, and requires pilots plus usage review before widening proactive or dynamic workflows. |
+| Loop-worthiness and maturity / 是否值得做 Loop 与自治成熟度 | GodModeAI2025 LoopCreatorSkill | `SKILL.md` and the template catalog now require a loop-worthiness gate, honest non-success end states, autonomy maturity levels, independent acceptance, and optional project-local `LOOPS.md` reuse. |
 | Agentic design patterns / agentic 设计模式 | Andrew Ng / DeepLearning.AI | `decomposition_policy`, `collaboration_policy`, reviewer/reflection tasks, and multi-agent activation. |
 | Durable state / 持久状态 | LangGraph | `state.json`, `journal.jsonl`, `PROGRESS.md`, generated evidence paths, and context reload rules. |
 | Human-in-the-loop / 人工确认 | LangGraph HITL, OpenAI Agents SDK, GitHub Agentic Workflows | `human_gates`, `decision_policy.user_confirmation`, `proxy_decision_agent.default_when_uncertain`, irreversible action gates. |
